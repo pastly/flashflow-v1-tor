@@ -524,6 +524,7 @@ relay_command_to_string(uint8_t command)
     case RELAY_COMMAND_INTRODUCE_ACK: return "INTRODUCE_ACK";
     case RELAY_COMMAND_EXTEND2: return "EXTEND2";
     case RELAY_COMMAND_EXTENDED2: return "EXTENDED2";
+    case RELAY_COMMAND_PING: return "PING";
     default:
       tor_snprintf(buf, sizeof(buf), "Unrecognized relay command %u",
                    (unsigned)command);
@@ -1428,6 +1429,23 @@ connection_edge_process_relay_cell_not_open(
 //  return -1;
 }
 
+static void
+respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
+{
+  channel_t *chan = NULL;
+  relay_header_t rh;
+
+  cell->circ_id = TO_OR_CIRCUIT(circ)->p_circ_id; /* switch directions */
+  chan = TO_OR_CIRCUIT(circ)->p_chan;
+
+  relay_header_unpack(&rh, cell->payload);
+  rh.command = RELAY_COMMAND_PONG;
+  relay_header_pack(cell->payload, &rh);
+
+  relay_encrypt_cell_inbound(cell, TO_OR_CIRCUIT(circ));
+  append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+}
+
 /** An incoming relay cell has arrived on circuit <b>circ</b>. If
  * <b>conn</b> is NULL this is a control cell, else <b>cell</b> is
  * destined for <b>conn</b>.
@@ -1506,6 +1524,10 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
     case RELAY_COMMAND_DROP:
       rep_hist_padding_count_read(PADDING_TYPE_DROP);
 //      log_info(domain,"Got a relay-level padding cell. Dropping.");
+      return 0;
+    case RELAY_COMMAND_PING:
+      log_notice(LD_EDGE, "Got PING command");
+      respond_with_pong(cell, circ, conn);
       return 0;
     case RELAY_COMMAND_BEGIN:
     case RELAY_COMMAND_BEGIN_DIR:
