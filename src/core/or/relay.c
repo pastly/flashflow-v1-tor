@@ -51,6 +51,12 @@
 #include "lib/err/backtrace.h"
 #include "lib/container/buffers.h"
 #include "core/or/channel.h"
+
+#define TOR_CHANNEL_INTERNAL_
+#include "core/or/channeltls.h"
+#undef TOR_CHANNEL_INTERNAL_
+#include "core/or/or_connection_st.h"
+
 #include "feature/client/circpathbias.h"
 #include "core/or/circuitbuild.h"
 #include "core/or/circuitlist.h"
@@ -1434,16 +1440,28 @@ respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
   channel_t *chan = NULL;
   relay_header_t rh;
+  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
 
-  cell->circ_id = TO_OR_CIRCUIT(circ)->p_circ_id; /* switch directions */
-  chan = TO_OR_CIRCUIT(circ)->p_chan;
+  /* note that we've handled ping cells */
+  or_circ->have_seen_ping_cell = 1;
+
+  cell->circ_id = or_circ->p_circ_id; /* switch directions */
+  chan = or_circ->p_chan;
 
   relay_header_unpack(&rh, cell->payload);
   rh.command = RELAY_COMMAND_PONG;
   relay_header_pack(cell->payload, &rh);
 
-  relay_encrypt_cell_inbound(cell, TO_OR_CIRCUIT(circ));
+  relay_encrypt_cell_inbound(cell, or_circ);
   append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+  int n = or_circ->p_chan_cells.n;
+  if (n > CELL_QUEUE_HIGHWATER_SIZE) {
+    //connection_stop_reading(conn);
+    // what I thought I should do
+    connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    // hint from kist
+    //buf_datalen(TO_CONN(BASE_CHAN_TO_TLS((channel_t *) chan)->conn)->outbuf);
+  }
 }
 
 /** An incoming relay cell has arrived on circuit <b>circ</b>. If
@@ -1526,7 +1544,7 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
 //      log_info(domain,"Got a relay-level padding cell. Dropping.");
       return 0;
     case RELAY_COMMAND_PING:
-      log_notice(LD_EDGE, "Got PING command");
+      //log_notice(LD_EDGE, "Got PING command");
       respond_with_pong(cell, circ, conn);
       return 0;
     case RELAY_COMMAND_BEGIN:
