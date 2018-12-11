@@ -124,9 +124,11 @@ static void adjust_exit_policy_from_exitpolicy_failure(origin_circuit_t *circ,
 /** Stop reading on edge connections when we have this many cells
  * waiting on the appropriate queue. */
 #define CELL_QUEUE_HIGHWATER_SIZE 256
+//#define CELL_QUEUE_HIGHWATER_SIZE 2040 /* 2040 cells * 514 bytes/cell == ~1 MiB */
 /** Start reading from edge connections again when we get down to this many
  * cells. */
 #define CELL_QUEUE_LOWWATER_SIZE 64
+//#define CELL_QUEUE_LOWWATER_SIZE (CELL_QUEUE_HIGHWATER_SIZE / 4)
 
 /** Stats: how many relay cells have originated at this hop, or have
  * been relayed onward (not recognized at this hop)?
@@ -1456,11 +1458,8 @@ respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
   append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
   int n = or_circ->p_chan_cells.n;
   if (n > CELL_QUEUE_HIGHWATER_SIZE) {
-    //connection_stop_reading(conn);
-    // what I thought I should do
+    //log_notice(LD_GENERAL, "Stopping reading on a ping circ");
     connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
-    // hint from kist
-    //buf_datalen(TO_CONN(BASE_CHAN_TO_TLS((channel_t *) chan)->conn)->outbuf);
   }
 }
 
@@ -2975,6 +2974,11 @@ channel_flush_from_first_active_circuit, (channel_t *chan, int max))
      * to write to this circuit? */
     if (streams_blocked && queue->n <= CELL_QUEUE_LOWWATER_SIZE)
       set_streams_blocked_on_circ(circ, chan, 0, 0); /* unblock streams */
+
+    if (or_circ->have_seen_ping_cell && queue->n <= CELL_QUEUE_LOWWATER_SIZE) {
+      //log_notice(LD_GENERAL, "Starting to read on a ping circ again");
+      connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    }
 
     /* If n_flushed < max still, loop around and pick another circuit */
   }
