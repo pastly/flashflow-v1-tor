@@ -2975,10 +2975,15 @@ channel_flush_from_first_active_circuit, (channel_t *chan, int max))
     if (streams_blocked && queue->n <= CELL_QUEUE_LOWWATER_SIZE)
       set_streams_blocked_on_circ(circ, chan, 0, 0); /* unblock streams */
 
-    if (CIRCUIT_IS_ORCIRC(circ) && or_circ->have_seen_ping_cell && queue->n <= CELL_QUEUE_LOWWATER_SIZE) {
-      //log_notice(LD_GENERAL, "Starting to read on a ping circ again");
-      connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    /* Begin ping cell stuff */
+    if (CIRCUIT_IS_ORCIRC(circ)) {
+      or_circ = TO_OR_CIRCUIT(circ);
+      if (or_circ->have_seen_ping_cell && queue->n <= CELL_QUEUE_LOWWATER_SIZE) {
+        //log_notice(LD_GENERAL, "Starting to read on a ping circ again");
+        connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+      }
     }
+    /* End ping cell stuff */
 
     /* If n_flushed < max still, loop around and pick another circuit */
   }
