@@ -1450,10 +1450,6 @@ respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
   cell->circ_id = or_circ->p_circ_id; /* switch directions */
   chan = or_circ->p_chan;
 
-  relay_header_unpack(&rh, cell->payload);
-  rh.command = RELAY_COMMAND_PONG;
-  relay_header_pack(cell->payload, &rh);
-
   relay_encrypt_cell_inbound(cell, or_circ);
   append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
   int n = or_circ->p_chan_cells.n;
