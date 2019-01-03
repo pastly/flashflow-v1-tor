@@ -1454,8 +1454,10 @@ respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
   append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
   int n = or_circ->p_chan_cells.n;
   if (n > CELL_QUEUE_HIGHWATER_SIZE) {
-    //log_notice(LD_GENERAL, "Stopping reading on a ping circ");
-    connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    if (connection_is_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn))) {
+      //log_notice(LD_GENERAL, "Stopping reading on a ping circ");
+      connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    }
   }
 }
 
@@ -2975,8 +2977,10 @@ channel_flush_from_first_active_circuit, (channel_t *chan, int max))
     if (CIRCUIT_IS_ORCIRC(circ)) {
       or_circ = TO_OR_CIRCUIT(circ);
       if (or_circ->have_seen_ping_cell && queue->n <= CELL_QUEUE_LOWWATER_SIZE) {
-        //log_notice(LD_GENERAL, "Starting to read on a ping circ again");
-        connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+        if (!connection_is_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn))) {
+          //log_notice(LD_GENERAL, "Starting to read on a ping circ again %d in queue", queue->n);
+          connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+        }
       }
     }
     /* End ping cell stuff */
