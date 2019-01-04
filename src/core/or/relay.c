@@ -145,6 +145,8 @@ uint64_t stats_n_circ_max_cell_reached = 0;
 /** Used to tell which stream to read from first on a circuit. */
 static tor_weak_rng_t stream_choice_rng = TOR_WEAK_RNG_INIT;
 
+static smartlist_t *ping_circs_waiting_for_pair = NULL;
+
 /**
  * Update channel usage state based on the type of relay cell and
  * circuit properties.
@@ -533,6 +535,7 @@ relay_command_to_string(uint8_t command)
     case RELAY_COMMAND_EXTEND2: return "EXTEND2";
     case RELAY_COMMAND_EXTENDED2: return "EXTENDED2";
     case RELAY_COMMAND_PING: return "PING";
+    case RELAY_COMMAND_PING_SETUP: return "PING_SETUP";
     default:
       tor_snprintf(buf, sizeof(buf), "Unrecognized relay command %u",
                    (unsigned)command);
@@ -1438,20 +1441,73 @@ connection_edge_process_relay_cell_not_open(
 }
 
 static void
-respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
+do_ping_setup(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
-  channel_t *chan = NULL;
-  relay_header_t rh;
-  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+  if (PREDICT_UNLIKELY(!ping_circs_waiting_for_pair))
+    ping_circs_waiting_for_pair = smartlist_new();
+
+#define RH_LEN 11
+  uint32_t id = tor_ntohl(get_uint32(cell->payload+RH_LEN));
+  //log_notice(LD_OR, "In do_ping_setup, got id=%u", id);
 
   /* note that we've handled ping cells */
+  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
   or_circ->have_seen_ping_cell = 1;
+  or_circ->ping_circ_identifier = id;
+  memcpy(&or_circ->ping_circ_saved_setup_cell, cell, 514);
 
+  or_circuit_t *found = NULL;
+  SMARTLIST_FOREACH(ping_circs_waiting_for_pair, or_circuit_t *, c, {
+    if (c->ping_circ_identifier == id) {
+      c->ping_circ_pair = or_circ;
+      or_circ->ping_circ_pair = c;
+      SMARTLIST_DEL_CURRENT(ping_circs_waiting_for_pair, c);
+      found = c;
+      break;
+    }
+
+  });
+  if (!found) {
+    log_notice(
+        LD_OR, "Couldn\'t find pair circ for id %u, adding to waiting", id);
+    smartlist_add(ping_circs_waiting_for_pair, or_circ);
+  } else {
+    log_notice(
+        LD_OR, "Found pair for id %u. %u circs still waiting for their pair. "
+        "Telling both circs with this id that we found their pair",
+        id, smartlist_len(ping_circs_waiting_for_pair));
+    channel_t *chan = or_circ->p_chan;
+    circuit_t *circ = &or_circ->base_;
+    cell_t *cell = (cell_t *)&or_circ->ping_circ_saved_setup_cell;
+    id = tor_ntohl(get_uint32(cell->payload+RH_LEN));
+    relay_encrypt_cell_inbound(cell, or_circ);
+    log_notice(LD_OR, "Saved cell has id %u", id);
+    append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+
+    chan = found->p_chan;
+    circ = &found->base_;
+    cell = (cell_t *)&found->ping_circ_saved_setup_cell;
+    id = tor_ntohl(get_uint32(cell->payload+RH_LEN));
+    relay_encrypt_cell_inbound(cell, found);
+    log_notice(LD_OR, "Saved cell has id %u", id);
+    append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+  }
+#undef RH_LEN
+}
+
+static void
+respond_to_ping(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
+{
+  channel_t *chan = NULL;
+  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+
+  or_circ = or_circ->ping_circ_pair; /* Swtich to other or_circ */
+  tor_assert(or_circ);
   cell->circ_id = or_circ->p_circ_id; /* switch directions */
   chan = or_circ->p_chan;
 
   relay_encrypt_cell_inbound(cell, or_circ);
-  append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+  append_cell_to_circuit_queue(&or_circ->base_, chan, cell, CELL_DIRECTION_IN, 0);
   int n = or_circ->p_chan_cells.n;
   if (n > CELL_QUEUE_HIGHWATER_SIZE) {
     if (connection_is_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn))) {
@@ -1542,7 +1598,10 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
       return 0;
     case RELAY_COMMAND_PING:
       //log_notice(LD_EDGE, "Got PING command");
-      respond_with_pong(cell, circ, conn);
+      respond_to_ping(cell, circ, conn);
+      return 0;
+    case RELAY_COMMAND_PING_SETUP:
+      do_ping_setup(cell, circ, conn);
       return 0;
     case RELAY_COMMAND_BEGIN:
     case RELAY_COMMAND_BEGIN_DIR:
