@@ -1506,7 +1506,7 @@ respond_to_ping(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
   cell->circ_id = or_circ->p_circ_id; /* switch directions */
   chan = or_circ->p_chan;
 
-  relay_encrypt_cell_inbound(cell, or_circ);
+  //relay_encrypt_cell_inbound(cell, or_circ);
   append_cell_to_circuit_queue(&or_circ->base_, chan, cell, CELL_DIRECTION_IN, 0);
   int n = or_circ->p_chan_cells.n;
   if (n > CELL_QUEUE_HIGHWATER_SIZE) {
