@@ -67,15 +67,6 @@ struct or_circuit_t {
   unsigned int circuit_carries_hs_traffic_stats : 1;
 
   unsigned int have_seen_ping_cell : 1;
-  /** The identifier the client has given us that she will use (or has used) on
-   * another circuit */
-  uint32_t ping_circ_identifier;
-  /** A copy of the RELAY_COMMAND_PING_SETUP cell we got from the client. We
-   * will send it back it indicate success when we've found the pair. */
-  char ping_circ_saved_setup_cell[514];
-  /** The other ping circuit we are matched up with. Ping data we get from the
-   * client goes to it, and vice versa. */
-  or_circuit_t *ping_circ_pair;
 
   /** Number of cells that were removed from circuit queue; reset every
    * time when writing buffer stats to disk. */
