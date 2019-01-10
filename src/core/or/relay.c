@@ -533,6 +533,7 @@ relay_command_to_string(uint8_t command)
     case RELAY_COMMAND_EXTEND2: return "EXTEND2";
     case RELAY_COMMAND_EXTENDED2: return "EXTENDED2";
     case RELAY_COMMAND_PING: return "PING";
+    case RELAY_COMMAND_SPEEDTEST_STARTSTOP: return "SPEEDTEST_STARTSTOP";
     default:
       tor_snprintf(buf, sizeof(buf), "Unrecognized relay command %u",
                    (unsigned)command);
@@ -1438,6 +1439,38 @@ connection_edge_process_relay_cell_not_open(
 }
 
 static void
+parse_relay_speedtest_startstop(
+    relay_speedtest_startstop_cell_t *ss, uint8_t *data)
+{
+  ss->is_start = !!get_uint32(data);
+}
+
+static void
+handle_relay_speedtest_startstop_cell(
+    cell_t *cell, circuit_t *circ, edge_connection_t *conn)
+{
+#define RH_LEN 11
+  uint32_t cell_count = 0;
+  relay_speedtest_startstop_cell_t ss;
+  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+  channel_t *chan = or_circ->p_chan;
+
+  parse_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
+  log_notice(
+      LD_EDGE, "Got SPEEDTEST_STARTSTOP %u=%s", ss.is_start,
+      ss.is_start ? "start" : "stop");
+
+  if (ss.is_start) {
+    scheduler_reset_cell_counter_and_start_counting();
+  } else {
+    cell_count = scheduler_get_cell_counter_and_stop_counting();
+    set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count));
+    append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+  }
+#undef RH_LEN
+}
+
+static void
 respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
   channel_t *chan = NULL;
@@ -1543,6 +1576,9 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
     case RELAY_COMMAND_PING:
       //log_notice(LD_EDGE, "Got PING command");
       respond_with_pong(cell, circ, conn);
+      return 0;
+    case RELAY_COMMAND_SPEEDTEST_STARTSTOP:
+      handle_relay_speedtest_startstop_cell(cell, circ, conn);
       return 0;
     case RELAY_COMMAND_BEGIN:
     case RELAY_COMMAND_BEGIN_DIR:

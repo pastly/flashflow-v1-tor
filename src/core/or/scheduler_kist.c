@@ -108,6 +108,9 @@ static unsigned int kist_no_kernel_support = 0;
 static unsigned int kist_lite_mode = 1;
 #endif /* defined(HAVE_KIST_SUPPORT) */
 
+static uint32_t cell_count = 0;
+static int currently_counting_cells = 0;
+
 /*****************************************************************************
  * Internally called function implementations
  *****************************************************************************/
@@ -634,6 +637,8 @@ kist_scheduler_run(void)
       if (flush_result > 0) {
         update_socket_written(&socket_table, chan, flush_result *
                               (CELL_MAX_NETWORK_SIZE + TLS_PER_CELL_OVERHEAD));
+        if (currently_counting_cells)
+          cell_count += flush_result;
       } else {
         /* XXX: This can happen because tor sometimes does flush in an
          * opportunistic way cells from the circuit to the outbuf so the
@@ -793,6 +798,20 @@ kist_scheduler_run_interval(void)
                                  KIST_SCHED_RUN_INTERVAL_MAX);
 }
 
+void
+scheduler_reset_cell_counter_and_start_counting(void)
+{
+  currently_counting_cells = 1;
+  cell_count = 0;
+}
+
+uint32_t
+scheduler_get_cell_counter_and_stop_counting(void)
+{
+  currently_counting_cells = 0;
+  return cell_count;
+}
+
 /* Set KISTLite mode that is KIST without kernel support. */
 void
 scheduler_kist_set_lite_mode(void)
@@ -840,5 +859,6 @@ scheduler_can_use_kist(void)
 {
   return 0;
 }
+void scheduler_reset_cell_counter_and_start_counting(void);
 
 #endif /* defined(HAVE_KIST_SUPPORT) */

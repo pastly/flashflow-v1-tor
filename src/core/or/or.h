@@ -196,6 +196,7 @@ struct curve25519_public_key_t;
 #define RELAY_COMMAND_EXTENDED2 15
 
 #define RELAY_COMMAND_PING 16
+#define RELAY_COMMAND_SPEEDTEST_STARTSTOP 17
 
 #define RELAY_COMMAND_ESTABLISH_INTRO 32
 #define RELAY_COMMAND_ESTABLISH_RENDEZVOUS 33
@@ -638,6 +639,10 @@ typedef struct {
   char integrity[4]; /**< Used to tell whether cell is corrupted. */
   uint16_t length; /**< How long is the payload body? */
 } relay_header_t;
+
+typedef struct {
+  uint8_t is_start; /** iff true, start command, otherwise stop command */
+} relay_speedtest_startstop_cell_t;
 
 typedef struct socks_request_t socks_request_t;
 typedef struct entry_port_cfg_t entry_port_cfg_t;
