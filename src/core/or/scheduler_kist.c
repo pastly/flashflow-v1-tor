@@ -95,6 +95,15 @@ static monotime_t scheduler_last_run;
 static double sock_buf_size_factor = 1.0;
 /* How often the scheduler runs. */
 STATIC int sched_run_interval = KIST_SCHED_RUN_INTERVAL_DEFAULT;
+/* Whenever the flag is non-zero, we schedule primary type circuits. Otherwise
+ * we schedule special type circuits. */
+static uint64_t sched_toggle_flag = 0;
+/* We schedule the primary circuit type this many times in a row, then scehdule
+ * the special type of circuit once, then repeat. */
+static uint64_t sched_toggle_period = 0;
+/* If non-zero, then primary type of circuit is circs with is_echo_circ true.
+ * Otherwise primary is circs with is_echo_circ false (normal circuits). */
+static uint8_t sched_toggle_primary_is_echo = 0;
 
 #ifdef HAVE_KIST_SUPPORT
 /* Indicate if KIST lite mode is on or off. We can disable it at runtime.
@@ -114,6 +123,19 @@ static int currently_counting_cells = 0;
 /*****************************************************************************
  * Internally called function implementations
  *****************************************************************************/
+
+static inline int
+should_schedule_echo_circs()
+{
+  if (sched_toggle_flag && sched_toggle_primary_is_echo)
+    return 1;
+  else if (sched_toggle_flag) // and not primary_is_echo
+    return 0;
+  else if (sched_toggle_primary_is_echo) // and not flag
+    return 0;
+  else // not flag and not primary_is_echo
+    return 1;
+}
 
 /* Little helper function to get the length of a channel's output buffer */
 static inline size_t
@@ -501,6 +523,9 @@ static void
 kist_scheduler_on_new_options(void)
 {
   sock_buf_size_factor = get_options()->KISTSockBufSizeFactor;
+  sched_toggle_flag = 0;
+  sched_toggle_period = get_options()->EchoCircPeriod;
+  sched_toggle_primary_is_echo = get_options()->EchoCircPrimaryIsEcho;
 
   /* Calls kist_scheduler_run_interval which calls get_options(). */
   set_scheduler_run_interval();
@@ -588,8 +613,15 @@ kist_scheduler_run(void)
       update_socket_info(&socket_table, pchan);
   } SMARTLIST_FOREACH_END(pchan);
 
-  log_debug(LD_SCHED, "Running the scheduler. %d channels pending",
-            smartlist_len(cp));
+  sched_toggle_flag += 1;
+  if (sched_toggle_flag > sched_toggle_period)
+    sched_toggle_flag = 0;
+  int is_echo_circ = should_schedule_echo_circs();
+
+  log_debug(
+      LD_SCHED, "Running the scheduler. %d channels pending. "
+      "Handling %s circuits.", smartlist_len(cp),
+      is_echo_circ ? "echo" : "regular");
 
   /* The main scheduling loop. Loop until there are no more pending channels */
   while (smartlist_len(cp) > 0) {

@@ -1036,6 +1036,9 @@ struct or_options_t {
   /* An ordered list of scheduler_types mapped from Schedulers. */
   struct smartlist_t *SchedulerTypes_;
 
+  uint64_t EchoCircPeriod;
+  int EchoCircPrimaryIsEcho;
+
   /** List of files that were opened by %include in torrc and torrc-defaults */
   struct smartlist_t *FilesOpenedByIncludes;
 
