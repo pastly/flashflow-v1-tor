@@ -669,7 +669,7 @@ kist_scheduler_run(void)
       if (flush_result > 0) {
         update_socket_written(&socket_table, chan, flush_result *
                               (CELL_MAX_NETWORK_SIZE + TLS_PER_CELL_OVERHEAD));
-        if (currently_counting_cells)
+        if (currently_counting_cells && !is_echo_circ)
           cell_count += flush_result;
       } else {
         /* XXX: This can happen because tor sometimes does flush in an
