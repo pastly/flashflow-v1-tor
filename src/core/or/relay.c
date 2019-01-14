@@ -1477,8 +1477,8 @@ handle_relay_echo_cell(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
   relay_header_t rh;
   or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
 
-  /* note that we've handled ping cells */
-  or_circ->have_seen_ping_cell = 1;
+  /* note that we've handled echo cells */
+  circ->is_echo_circ = 1;
 
   cell->circ_id = or_circ->p_circ_id; /* switch directions */
   chan = or_circ->p_chan;

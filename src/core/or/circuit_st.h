@@ -93,6 +93,8 @@ struct circuit_t {
   /** True iff this circuit has received a DESTROY cell in either direction */
   unsigned int received_destroy : 1;
 
+  unsigned int is_echo_circ : 1;
+
   uint8_t state; /**< Current status of this circuit. */
   uint8_t purpose; /**< Why are we creating this circuit? */
 
