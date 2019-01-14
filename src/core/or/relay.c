@@ -1471,7 +1471,7 @@ handle_relay_speedtest_startstop_cell(
 }
 
 static void
-respond_with_pong(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
+handle_relay_echo_cell(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
   channel_t *chan = NULL;
   relay_header_t rh;
@@ -1575,7 +1575,7 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
       return 0;
     case RELAY_COMMAND_PING:
       //log_notice(LD_EDGE, "Got PING command");
-      respond_with_pong(cell, circ, conn);
+      handle_relay_echo_cell(cell, circ, conn);
       return 0;
     case RELAY_COMMAND_SPEEDTEST_STARTSTOP:
       handle_relay_speedtest_startstop_cell(cell, circ, conn);
