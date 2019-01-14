@@ -600,7 +600,7 @@ kist_scheduler_run(void)
   channel_t *chan = NULL; // current working channel
   /* The last distinct chan served in a sched loop. */
   channel_t *prev_chan = NULL;
-  int flush_result; // temporarily store results from flush calls
+  int flush_result = 0; // temporarily store results from flush calls
   /* Channels to be re-adding to pending at the end */
   smartlist_t *to_readd = NULL;
   smartlist_t *cp = get_channels_pending();
@@ -652,7 +652,7 @@ kist_scheduler_run(void)
     /* Only flush and write if the per-socket limit hasn't been hit */
     if (socket_can_write(&socket_table, chan)) {
       /* flush to channel queue/outbuf */
-      flush_result = (int)channel_flush_some_cells(chan, 1); // 1 for num cells
+      flush_result = (int)channel_flush_some_cells(chan, 1, is_echo_circ); // 1 for num cells
       /* XXX: While flushing cells, it is possible that the connection write
        * fails leading to the channel to be closed which triggers a release
        * and free its entry in the socket table. And because of a engineering
@@ -677,22 +677,31 @@ kist_scheduler_run(void)
          * channel can end up here without having anything to flush nor needed
          * to write to the kernel. Hopefully we'll fix that soon but for now
          * we have to handle this case which happens kind of often. */
-        log_debug(LD_SCHED,
-                 "We didn't flush anything on a chan that we think "
-                 "can write and wants to write. The channel's state is '%s' "
-                 "and in scheduler state '%s'. We're going to mark it as "
-                 "waiting_for_cells (as that's most likely the issue) and "
-                 "stop scheduling it this round.",
-                 channel_state_to_string(chan->state),
-                 get_scheduler_state_string(chan->scheduler_state));
-        scheduler_set_channel_state(chan, SCHED_CHAN_WAITING_FOR_CELLS);
-        continue;
+        //log_debug(LD_SCHED,
+        //         "We didn't flush anything on a chan that we think "
+        //         "can write and wants to write. The channel's state is '%s' "
+        //         "and in scheduler state '%s'. is_echo_circ_toggle=%d. "
+        //         "We're going to mark it as "
+        //         "waiting_for_cells (as that's most likely the issue) and "
+        //         "stop scheduling it this round.",
+        //         channel_state_to_string(chan->state),
+        //         get_scheduler_state_string(chan->scheduler_state),
+        //         is_echo_circ_toggle);
+        //scheduler_set_channel_state(chan, SCHED_CHAN_WAITING_FOR_CELLS);
+        //continue;
       }
     }
 
     /* Decide what to do with the channel now */
 
-    if (!channel_more_to_flush(chan) &&
+    tor_assert(flush_result >= 0);
+
+    if (flush_result == 0 && channel_more_to_flush(chan)) {
+      if (!to_readd) {
+        to_readd = smartlist_new();
+      }
+      smartlist_add(to_readd, chan);
+    } else if (!channel_more_to_flush(chan) &&
         !socket_can_write(&socket_table, chan)) {
 
       /* Case 1: no more cells to send, and cannot write */

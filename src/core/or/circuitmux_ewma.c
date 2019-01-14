@@ -211,7 +211,8 @@ ewma_notify_xmit_cells(circuitmux_t *cmux,
                        unsigned int n_cells);
 static circuit_t *
 ewma_pick_active_circuit(circuitmux_t *cmux,
-                         circuitmux_policy_data_t *pol_data);
+                         circuitmux_policy_data_t *pol_data,
+                         int is_echo_circ);
 static int
 ewma_cmp_cmux(circuitmux_t *cmux_1, circuitmux_policy_data_t *pol_data_1,
               circuitmux_t *cmux_2, circuitmux_policy_data_t *pol_data_2);
@@ -473,13 +474,14 @@ ewma_notify_xmit_cells(circuitmux_t *cmux,
  * in channel_flush_from_first_active_circuit().
  */
 
+#include "core/or/circuit_st.h"
 static circuit_t *
 ewma_pick_active_circuit(circuitmux_t *cmux,
-                         circuitmux_policy_data_t *pol_data)
+                         circuitmux_policy_data_t *pol_data,
+                         int is_echo_circ)
 {
   ewma_policy_data_t *pol = NULL;
   circuit_t *circ = NULL;
-  cell_ewma_t *cell_ewma = NULL;
 
   tor_assert(cmux);
   tor_assert(pol_data);
@@ -487,12 +489,13 @@ ewma_pick_active_circuit(circuitmux_t *cmux,
   pol = TO_EWMA_POL_DATA(pol_data);
 
   if (smartlist_len(pol->active_circuit_pqueue) > 0) {
-    /* Get the head of the queue */
-    cell_ewma = smartlist_get(pol->active_circuit_pqueue, 0);
-    circ = cell_ewma_to_circuit(cell_ewma);
+    SMARTLIST_FOREACH(pol->active_circuit_pqueue, cell_ewma_t *, cell_ewma, {
+      circ = cell_ewma_to_circuit(cell_ewma);
+      if (circ->is_echo_circ == is_echo_circ)
+        return circ;
+    });
   }
-
-  return circ;
+  return NULL;
 }
 
 /**

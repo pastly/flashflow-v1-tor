@@ -2865,7 +2865,7 @@ packed_cell_get_circid(const packed_cell_t *cell, int wide_circ_ids)
  * <b>chan</b>-&gt;outbuf.  Return the number of cells written.  Advance
  * the active circuit pointer to the next active circuit in the ring. */
 MOCK_IMPL(int,
-channel_flush_from_first_active_circuit, (channel_t *chan, int max))
+channel_flush_from_first_active_circuit, (channel_t *chan, int max, int is_echo_circ))
 {
   circuitmux_t *cmux = NULL;
   int n_flushed = 0;
@@ -2883,7 +2883,7 @@ channel_flush_from_first_active_circuit, (channel_t *chan, int max))
 
   /* Main loop: pick a circuit, send a cell, update the cmux */
   while (n_flushed < max) {
-    circ = circuitmux_get_first_active_circuit(cmux, &destroy_queue);
+    circ = circuitmux_get_first_active_circuit(cmux, &destroy_queue, is_echo_circ);
     if (destroy_queue) {
       destroy_cell_t *dcell;
       /* this code is duplicated from some of the logic below. Ugly! XXXX */

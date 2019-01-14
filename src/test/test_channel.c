@@ -604,7 +604,7 @@ test_channel_outbound_cell(void *arg)
 
   /* Flush the channel without any cell on it. */
   old_count = test_cells_written;
-  ssize_t flushed = channel_flush_some_cells(chan, 1);
+  ssize_t flushed = channel_flush_some_cells(chan, 1, 0);
   tt_i64_op(flushed, OP_EQ, 0);
   tt_int_op(test_cells_written, OP_EQ, old_count);
   tt_int_op(channel_more_to_flush(chan), OP_EQ, 0);
@@ -635,7 +635,7 @@ test_channel_outbound_cell(void *arg)
 
   /* Flush the first cell. This is going to go down the call stack. */
   old_count = test_cells_written;
-  flushed = channel_flush_some_cells(chan, 1);
+  flushed = channel_flush_some_cells(chan, 1, 0);
   tt_i64_op(flushed, OP_EQ, 1);
   tt_int_op(test_cells_written, OP_EQ, old_count + 1);
   tt_int_op(circuitmux_num_cells(chan->cmux), OP_EQ, 1);
@@ -651,7 +651,7 @@ test_channel_outbound_cell(void *arg)
 
   /* Flush second cell. This is going to go down the call stack. */
   old_count = test_cells_written;
-  flushed = channel_flush_some_cells(chan, 1);
+  flushed = channel_flush_some_cells(chan, 1, 0);
   tt_i64_op(flushed, OP_EQ, 1);
   tt_int_op(test_cells_written, OP_EQ, old_count + 1);
   tt_int_op(circuitmux_num_cells(chan->cmux), OP_EQ, 0);

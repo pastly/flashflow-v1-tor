@@ -1713,7 +1713,7 @@ channel_listener_change_state(channel_listener_t *chan_l,
  *
  * This function is part of the fast path. */
 MOCK_IMPL(ssize_t,
-channel_flush_some_cells, (channel_t *chan, ssize_t num_cells))
+channel_flush_some_cells, (channel_t *chan, ssize_t num_cells, int is_echo_circ))
 {
   unsigned int unlimited = 0;
   ssize_t flushed = 0;
@@ -1741,7 +1741,7 @@ channel_flush_some_cells, (channel_t *chan, ssize_t num_cells))
 
       /* Try to get more cells from any active circuits */
       flushed = channel_flush_from_first_active_circuit(
-          chan, clamped_num_cells);
+          chan, clamped_num_cells, is_echo_circ);
     }
   }
 

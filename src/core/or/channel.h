@@ -636,7 +636,7 @@ void channel_process_cell(channel_t *chan, cell_t *cell);
 
 /* Request from lower layer for more cells if available */
 MOCK_DECL(ssize_t, channel_flush_some_cells,
-          (channel_t *chan, ssize_t num_cells));
+          (channel_t *chan, ssize_t num_cells, int is_echo_circ));
 
 /* Query if data available on this channel */
 MOCK_DECL(int, channel_more_to_flush, (channel_t *chan));

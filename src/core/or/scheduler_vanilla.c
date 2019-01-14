@@ -80,7 +80,7 @@ vanilla_scheduler_run(void)
       while (flushed < n_cells) {
         flushed_this_time =
           channel_flush_some_cells(chan,
-                        MIN(MAX_FLUSH_CELLS, (size_t) n_cells - flushed));
+                        MIN(MAX_FLUSH_CELLS, (size_t) n_cells - flushed), 0);
         if (flushed_this_time <= 0) break;
         flushed += flushed_this_time;
       }
