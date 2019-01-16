@@ -641,7 +641,18 @@ typedef struct {
 } relay_header_t;
 
 typedef struct {
-  uint8_t is_start; /** iff true, start command, otherwise stop command */
+  union {
+    /* to relay: iff true, start command, otherwise stop command */
+    uint32_t is_start;
+    /* from relay: reporting num of background bytes sent since last report */
+    uint32_t num_bytes;
+  };
+  union {
+    /* to relay: how often to report num of background bytes, in ms */
+    uint32_t report_interval_ms;
+    /* from relay: empty field */
+    uint32_t unused;
+  };
 } relay_speedtest_startstop_cell_t;
 
 typedef struct socks_request_t socks_request_t;

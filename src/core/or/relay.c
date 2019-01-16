@@ -1439,10 +1439,13 @@ connection_edge_process_relay_cell_not_open(
 }
 
 static void
-parse_relay_speedtest_startstop(
+parse_inbound_relay_speedtest_startstop(
     relay_speedtest_startstop_cell_t *ss, uint8_t *data)
 {
-  ss->is_start = !!get_uint32(data);
+  ss->is_start = !!tor_ntohl(get_uint32(data));
+  if (!ss->is_start)
+    return;
+  ss->report_interval_ms = tor_ntohl(get_uint32(data+4));
 }
 
 static void
@@ -1455,10 +1458,14 @@ handle_relay_speedtest_startstop_cell(
   or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
   channel_t *chan = or_circ->p_chan;
 
-  parse_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
-  log_notice(
-      LD_EDGE, "Got SPEEDTEST_STARTSTOP %u=%s", ss.is_start,
-      ss.is_start ? "start" : "stop");
+  parse_inbound_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
+  if (ss.is_start) {
+    log_notice(
+        LD_EDGE, "Got speedtest start command telling us to report every "
+        "%ums", ss.report_interval_ms);
+  } else {
+    log_notice(LD_EDGE, "Got speedtest stop command");
+  }
 
   if (ss.is_start) {
     scheduler_reset_cell_counter_and_start_counting();
