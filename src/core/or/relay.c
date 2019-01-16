@@ -1468,7 +1468,7 @@ handle_relay_speedtest_startstop_cell(
   }
 
   if (ss.is_start) {
-    scheduler_reset_cell_counter_and_start_counting();
+    scheduler_reset_cell_counter_and_start_counting(ss.report_interval_ms);
   } else {
     cell_count = scheduler_get_cell_counter_and_stop_counting();
     set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count * 514));

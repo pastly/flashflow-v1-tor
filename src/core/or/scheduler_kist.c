@@ -119,6 +119,8 @@ static unsigned int kist_lite_mode = 1;
 
 static uint32_t cell_count = 0;
 static int currently_counting_cells = 0;
+static uint32_t report_interval_ms = 0;
+static monotime_t last_report_time;
 
 /*****************************************************************************
  * Internally called function implementations
@@ -783,6 +785,15 @@ kist_scheduler_run(void)
   }
 
   monotime_get(&scheduler_last_run);
+  if (currently_counting_cells) {
+    monotime_t now = scheduler_last_run;
+    int64_t diff = monotime_diff_msec(&last_report_time, &now);
+    if (diff >= report_interval_ms) {
+      log_notice(LD_SCHED, "Would report %u cells now.", cell_count);
+      cell_count = 0;
+      last_report_time = now;
+    }
+  }
 }
 
 /*****************************************************************************
@@ -840,9 +851,11 @@ kist_scheduler_run_interval(void)
 }
 
 void
-scheduler_reset_cell_counter_and_start_counting(void)
+scheduler_reset_cell_counter_and_start_counting(uint32_t report_interval_ms_)
 {
   currently_counting_cells = 1;
+  report_interval_ms = report_interval_ms_;
+  monotime_get(&last_report_time);
   cell_count = 0;
 }
 
@@ -900,6 +913,5 @@ scheduler_can_use_kist(void)
 {
   return 0;
 }
-void scheduler_reset_cell_counter_and_start_counting(void);
 
 #endif /* defined(HAVE_KIST_SUPPORT) */

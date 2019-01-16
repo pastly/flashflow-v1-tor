@@ -199,7 +199,8 @@ void scheduler_kist_set_full_mode(void);
 void scheduler_kist_set_lite_mode(void);
 scheduler_t *get_kist_scheduler(void);
 int kist_scheduler_run_interval(void);
-void scheduler_reset_cell_counter_and_start_counting(void);
+void scheduler_reset_cell_counter_and_start_counting(
+    uint32_t report_interval_ms);
 uint32_t scheduler_get_cell_counter_and_stop_counting(void);
 
 #ifdef TOR_UNIT_TESTS
