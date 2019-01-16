@@ -142,6 +142,8 @@ uint64_t stats_n_relay_cells_delivered = 0;
  * reached (see append_cell_to_circuit_queue()) */
 uint64_t stats_n_circ_max_cell_reached = 0;
 
+static circuit_t *saved_coord_circ = NULL;
+
 /** Used to tell which stream to read from first on a circuit. */
 static tor_weak_rng_t stream_choice_rng = TOR_WEAK_RNG_INIT;
 
@@ -1438,6 +1440,34 @@ connection_edge_process_relay_cell_not_open(
 //  return -1;
 }
 
+#define RH_LEN 11
+void
+report_cell_count(uint32_t cell_count)
+{
+  if (!saved_coord_circ)
+    return;
+  if (saved_coord_circ->state != CIRCUIT_STATE_OPEN)
+    return;
+  log_notice(LD_EDGE, "Would report %u cells now.", cell_count);
+
+  cell_t c;
+  relay_header_t rh;
+  circuit_t *circ = saved_coord_circ;
+  or_circuit_t *or_circ = TO_OR_CIRCUIT(saved_coord_circ);
+  channel_t *chan = or_circ->p_chan;
+
+  memset(&c, 0, sizeof(cell_t));
+  memset(&rh, 0, sizeof(relay_header_t));
+  c.circ_id = or_circ->p_circ_id;
+  c.command = CELL_RELAY;
+  rh.command = RELAY_COMMAND_SPEEDTEST_STARTSTOP;
+  rh.length = 8;
+  relay_header_pack(&c.payload, &rh);
+  set_uint32(c.payload+RH_LEN, tor_htonl(cell_count * 498));
+  set_uint32(c.payload+RH_LEN+4, 0);
+  append_cell_to_circuit_queue(circ, chan, &c, CELL_DIRECTION_IN, 0);
+}
+
 static void
 parse_inbound_relay_speedtest_startstop(
     relay_speedtest_startstop_cell_t *ss, uint8_t *data)
@@ -1452,7 +1482,6 @@ static void
 handle_relay_speedtest_startstop_cell(
     cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
-#define RH_LEN 11
   uint32_t cell_count = 0;
   relay_speedtest_startstop_cell_t ss;
   or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
@@ -1469,12 +1498,13 @@ handle_relay_speedtest_startstop_cell(
 
   if (ss.is_start) {
     scheduler_reset_cell_counter_and_start_counting(ss.report_interval_ms);
+    saved_coord_circ = circ;
   } else {
     cell_count = scheduler_get_cell_counter_and_stop_counting();
     set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count * 514));
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+    saved_coord_circ = NULL;
   }
-#undef RH_LEN
 }
 
 static void
@@ -1500,6 +1530,7 @@ handle_relay_echo_cell(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
     }
   }
 }
+#undef RH_LEN
 
 /** An incoming relay cell has arrived on circuit <b>circ</b>. If
  * <b>conn</b> is NULL this is a control cell, else <b>cell</b> is

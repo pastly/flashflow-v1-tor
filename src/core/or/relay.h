@@ -69,6 +69,8 @@ void append_cell_to_circuit_queue(circuit_t *circ, channel_t *chan,
                                   cell_t *cell, cell_direction_t direction,
                                   streamid_t fromstream);
 
+void report_cell_count(uint32_t cell_count);
+
 void destroy_cell_queue_init(destroy_cell_queue_t *queue);
 void destroy_cell_queue_clear(destroy_cell_queue_t *queue);
 void destroy_cell_queue_append(destroy_cell_queue_t *queue,

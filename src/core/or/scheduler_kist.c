@@ -789,7 +789,7 @@ kist_scheduler_run(void)
     monotime_t now = scheduler_last_run;
     int64_t diff = monotime_diff_msec(&last_report_time, &now);
     if (diff >= report_interval_ms) {
-      log_notice(LD_SCHED, "Would report %u cells now.", cell_count);
+      report_cell_count(cell_count);
       cell_count = 0;
       last_report_time = now;
     }
