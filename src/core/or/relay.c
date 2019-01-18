@@ -260,6 +260,14 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
 
   circuit_update_channel_usage(circ, cell);
 
+  if (!recognized && circ->is_echo_circ) {
+    or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+    cell->circ_id = or_circ->p_circ_id; /* switch directions */
+    channel_t *chan = or_circ->p_chan;
+    append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+    return 0;
+  }
+
   if (recognized) {
     edge_connection_t *conn = NULL;
 
