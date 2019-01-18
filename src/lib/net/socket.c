@@ -18,6 +18,7 @@
 #include "lib/lock/compat_mutex.h"
 #include "lib/log/log.h"
 #include "lib/log/util_bug.h"
+#include "lib/time/compat_time.h"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -214,6 +215,7 @@ tor_close_socket,(tor_socket_t s))
 MOCK_IMPL(tor_socket_t,
 tor_open_socket,(int domain, int type, int protocol))
 {
+  log_info(LD_SCHED, "Opening blocking socket");
   return tor_open_socket_with_extensions(domain, type, protocol, 1, 0);
 }
 
@@ -230,6 +232,7 @@ tor_connect_socket,(tor_socket_t sock, const struct sockaddr *address,
 tor_socket_t
 tor_open_socket_nonblocking(int domain, int type, int protocol)
 {
+  log_info(LD_SCHED, "Opening non-blocking socket");
   return tor_open_socket_with_extensions(domain, type, protocol, 1, 1);
 }
 
@@ -329,6 +332,7 @@ tor_release_socket_ownership(tor_socket_t s)
 tor_socket_t
 tor_accept_socket(tor_socket_t sockfd, struct sockaddr *addr, socklen_t *len)
 {
+  log_info(LD_SCHED, "Accepting blocking socket");
   return tor_accept_socket_with_extensions(sockfd, addr, len, 1, 0);
 }
 
@@ -338,6 +342,7 @@ tor_socket_t
 tor_accept_socket_nonblocking(tor_socket_t sockfd, struct sockaddr *addr,
                               socklen_t *len)
 {
+  log_info(LD_SCHED, "Accepting non-blocking socket");
   return tor_accept_socket_with_extensions(sockfd, addr, len, 1, 1);
 }
 
@@ -558,6 +563,8 @@ read_all_from_socket(tor_socket_t sock, char *buf, size_t count)
 {
   size_t numread = 0;
   ssize_t result;
+  monotime_t start, end;
+  monotime_get(&start);
 
   if (count > SIZE_T_CEILING || count > SSIZE_MAX) {
     errno = EINVAL;
@@ -572,6 +579,11 @@ read_all_from_socket(tor_socket_t sock, char *buf, size_t count)
       break;
     numread += result;
   }
+  monotime_get(&end);
+  int64_t diff = monotime_diff_nsec(&start, &end);
+  log_info(
+    LD_SCHED, "Spent %i ns reading %u bytes from sock %u",
+    diff, numread, sock);
   return (ssize_t)numread;
 }
 
@@ -583,6 +595,8 @@ write_all_to_socket(tor_socket_t fd, const char *buf, size_t count)
   size_t written = 0;
   ssize_t result;
   raw_assert(count < SSIZE_MAX);
+  monotime_t start, end;
+  monotime_get(&start);
 
   while (written != count) {
     result = tor_socket_send(fd, buf+written, count-written, 0);
@@ -590,6 +604,11 @@ write_all_to_socket(tor_socket_t fd, const char *buf, size_t count)
       return -1;
     written += result;
   }
+  monotime_get(&end);
+  int64_t diff = monotime_diff_nsec(&start, &end);
+  log_info(
+    LD_SCHED, "Spent %i ns writing %u bytes to sock %u",
+    diff, written, fd);
   return (ssize_t)count;
 }
 
