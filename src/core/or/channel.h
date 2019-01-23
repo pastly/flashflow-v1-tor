@@ -202,6 +202,8 @@ struct channel_s {
   /** has this channel ever been open? */
   unsigned int has_been_open:1;
 
+  unsigned int has_echo_circ:1;
+
   /**
    * This field indicates if the other side has enabled or disabled
    * padding via either the link protocol version or
