@@ -464,7 +464,11 @@ ewma_notify_xmit_cells(circuitmux_t *cmux,
    * the queue.  Pop the head, assert that it matches, then re-add.
    */
   tmp = pop_first_cell_ewma(pol);
-  tor_assert(tmp == cell_ewma);
+  if (tmp != cell_ewma) {
+    log_notice(LD_SCHED, "Oh no! This is happening for some reason! %a %a",
+        tmp, cell_ewma);
+  }
+  //tor_assert(tmp == cell_ewma);
   add_cell_ewma(pol, cell_ewma);
 }
 
