@@ -617,6 +617,13 @@ kist_scheduler_run(void)
   SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
       init_socket_info(&socket_table, pchan);
       update_socket_info(&socket_table, pchan);
+      //int outbuf_num = channel_outbuf_length(pchan);
+      //int cmux_num = circuitmux_num_cells(pchan->cmux);
+      //if (cmux_num > 500) {
+      //  log_notice(
+      //      LD_SCHED, "Channel %d has %d cells in outbuf and %d in cmux",
+      //      pchan->global_identifier, outbuf_num, cmux_num);
+      //}
   } SMARTLIST_FOREACH_END(pchan);
 
   sched_toggle_flag += 1;

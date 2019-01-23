@@ -264,6 +264,13 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
   if (circ->marked_for_close)
     return 0;
 
+  /* The way Rob did it (1/2) */
+  if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
+    //log_notice(LD_OR, "Got echo cell (1/2)");
+    circ->num_recv_echo_cells++;
+    return 0;
+  }
+
   if (relay_decrypt_cell(circ, cell, cell_direction, &layer_hint, &recognized)
       < 0) {
     log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
@@ -273,11 +280,23 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
 
   circuit_update_channel_usage(circ, cell);
 
-  if (!recognized && circ->is_echo_circ) {
+  /* The way Matt did it */
+  //if (!recognized && circ->is_echo_circ) {
+  //  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+  //  cell->circ_id = or_circ->p_circ_id; /* switch directions */
+  //  channel_t *chan = or_circ->p_chan;
+  //  append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+  //  return 0;
+  //}
+  /* The way Rob did it (2/2) */
+  if (circ->is_echo_circ && CIRCUIT_IS_ORCIRC(circ)) {
+    //log_notice(LD_OR, "Got echo cell (2/2)");
     or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
-    cell->circ_id = or_circ->p_circ_id; /* switch directions */
-    channel_t *chan = or_circ->p_chan;
+    cell->circ_id = or_circ->p_circ_id;
+    chan = or_circ->p_chan;
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+    circ->num_recv_echo_cells++;
+    circ->num_sent_echo_cells++;
     return 0;
   }
 
@@ -1655,8 +1674,13 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
 //      log_info(domain,"Got a relay-level padding cell. Dropping.");
       return 0;
     case RELAY_COMMAND_PING:
-      //log_notice(LD_EDGE, "Got PING command");
-      handle_relay_echo_cell(cell, circ, conn);
+      /* Matt's code */
+      //handle_relay_echo_cell(cell, circ, conn);
+      /* Rob's code */
+      circ->is_echo_circ = 1;
+      log_notice(domain,
+          "SPEEDTEST/ECHO/PING cell on circ %u/%u, marked as echo circ",
+          circ->n_circ_id, TO_OR_CIRCUIT(circ)->p_circ_id);
       return 0;
     case RELAY_COMMAND_SPEEDTEST_STARTSTOP:
       handle_relay_speedtest_startstop_cell(cell, circ, conn);
@@ -2913,6 +2937,26 @@ set_streams_blocked_on_circ(circuit_t *circ, channel_t *chan,
       /* Is this right? */
       if (!connection_is_reading(conn))
         connection_start_reading(conn);
+    }
+  }
+
+  if (!block && circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
+    origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
+    if (time(NULL) >= circ->echo_stop_time) {
+      //control_event_speedtest_complete(origin_circ);
+      log_notice(
+          LD_OR, "Completed speedtest on circ %"PRIu32". Received %lu "
+          "cells, sent %lu cells in %"PRIu32" seconds with %s",
+          origin_circ->global_identifier,
+          circ->num_recv_echo_cells,
+          circ->num_sent_echo_cells,
+          circ->echo_duration,
+          !origin_circ->cpath ?
+            "<null>" :
+            extend_info_describe(origin_circ->cpath->extend_info));
+      circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+    } else {
+      circuit_send_speedtest_cells(origin_circ);
     }
   }
 

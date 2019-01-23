@@ -1350,6 +1350,7 @@ static const struct control_event_t control_event_table[] = {
   { EVENT_HS_DESC, "HS_DESC" },
   { EVENT_HS_DESC_CONTENT, "HS_DESC_CONTENT" },
   { EVENT_NETWORK_LIVENESS, "NETWORK_LIVENESS" },
+  { EVENT_TESTSPEED, "TESTSPEED"},
   { 0, NULL },
 };
 
@@ -5375,6 +5376,79 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</body>\n"
   "</html>\n";
 
+static int
+handle_control_testspeed(control_connection_t *conn, uint32_t len,
+    const char *body) {
+  smartlist_t *args;
+  (void)len; // body is null-terminated, so ignore len
+  args = getargs_helper("TESTSPEED", conn, body, 2, 2);
+  if (!args)
+    return 0;
+
+  log_notice(
+      LD_CONTROL, "Received TESTSPEED command: %s", body ? body : "NULL");
+  const char *relay_fp = smartlist_get(args, 0);
+  const node_t *node = node_get_by_nickname(relay_fp, 0);
+  if (!node) {
+    connection_printf_to_buf(conn, "552 No such router \"%s\"\r\n", relay_fp);
+    return 0;
+  }
+
+  const char *duration_str = smartlist_get(args, 1);
+  int ok = 0;
+  uint32_t duration = (uint32_t)tor_parse_ulong(duration_str, 10, 0, UINT32_MAX, &ok, NULL);
+  if (!ok)
+    return 0;
+
+  log_notice(LD_CONTROL, "Parsed TESTSPEED args fp=%s dur=%"PRIu32".",
+      relay_fp, duration);
+
+  // Make new circuit
+  origin_circuit_t *origin_circ = origin_circuit_init(CIRCUIT_PURPOSE_C_GENERAL, 0);
+  extend_info_t *info = extend_info_from_node(node, 1);
+  if (!info) {
+    log_warn(
+        LD_CONTROL, "Tried to connect to a node that lacks a suitable "
+        "descriptor, or which doesn't have any addresses that are allowed by "
+        "the firewall configuration. Marking circuit for closing.");
+    circuit_mark_for_close(TO_CIRCUIT(origin_circ), -END_CIRC_REASON_CONNECTFAILED);
+    connection_write_str_to_buf("551 Couldn't start circuit\r\n", conn);
+    return 0;
+  }
+
+  circuit_append_new_exit(origin_circ, info);
+  extend_info_free(info);
+  origin_circ->build_state->onehop_tunnel = 0;
+
+  // Start extending
+  int err_reason = 0;
+  if ((err_reason = circuit_handle_first_hop(origin_circ)) < 0) {
+    circuit_mark_for_close(TO_CIRCUIT(origin_circ), -err_reason);
+    log_warn(
+        LD_CONTROL, "Couldn't circuit_handle_first_hop. err_reason=%d",
+        err_reason);
+    connection_write_str_to_buf("551 Couldn't start circuit\r\n", conn);
+    return 0;
+  }
+
+  log_notice(LD_CONTROL, "Started a circuit build for TESTSPEED on circ %u",
+      origin_circ->global_identifier);
+
+  // Mark the circuit as a speedtest circuit
+  circuit_t *circ = TO_CIRCUIT(origin_circ);
+  circ->is_echo_circ = 1;
+  //circ->num_sent_echo_cells = 0;
+  //circ->num_recv_echo_cells = 0;
+  circ->echo_duration = duration;
+  conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
+
+  // Send events
+  control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
+  connection_printf_to_buf(conn, "250 SPEEDTESTING %u\r\n",
+      origin_circ->global_identifier);
+  return 0;
+}
+
 /** Called when data has arrived on a v1 control connection: Try to fetch
  * commands from conn->inbuf, and execute them.
  */
@@ -5607,6 +5681,9 @@ connection_control_process_inbuf(control_connection_t *conn)
     int ret = handle_control_del_onion(conn, cmd_data_len, args);
     memwipe(args, 0, cmd_data_len); /* Scrub the service id/pk. */
     if (ret)
+      return -1;
+  } else if (!strcasecmp(conn->incoming_cmd, "TESTSPEED")) {
+    if (handle_control_testspeed(conn, cmd_data_len, args))
       return -1;
   } else {
     connection_printf_to_buf(conn, "510 Unrecognized command \"%s\"\r\n",

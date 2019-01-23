@@ -94,6 +94,10 @@ struct circuit_t {
   unsigned int received_destroy : 1;
 
   unsigned int is_echo_circ : 1;
+  uint32_t echo_duration;
+  time_t echo_stop_time;
+  uint32_t num_recv_echo_cells;
+  uint32_t num_sent_echo_cells;
 
   uint8_t state; /**< Current status of this circuit. */
   uint8_t purpose; /**< Why are we creating this circuit? */

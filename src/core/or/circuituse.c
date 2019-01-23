@@ -36,6 +36,7 @@
 #include "core/or/circuitstats.h"
 #include "core/or/circuituse.h"
 #include "core/or/connection_edge.h"
+#include "core/or/relay.h"
 #include "core/or/policies.h"
 #include "feature/client/addressmap.h"
 #include "feature/client/bridges.h"
@@ -1655,6 +1656,30 @@ circuit_testing_failed(origin_circuit_t *circ, int at_last_hop)
   (void)at_last_hop;
 }
 
+void
+circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
+{
+  tor_assert(origin_circ);
+  circuit_t *circ = TO_CIRCUIT(origin_circ);
+  //log_info(LD_CONTROL, "Sending speedtest cells ...");
+  uint32_t after, before = circ->num_sent_echo_cells;
+  int res;
+  while (!circ->streams_blocked_on_n_chan) {
+    res = relay_send_command_from_edge(
+        0, circ, RELAY_COMMAND_PING, NULL, 0, origin_circ->cpath);
+    if (res < 0) {
+      log_warn(LD_CIRC,
+          "relay_send_command_from_edge failed for speedtest circ. "
+          "Circuit is closed");
+      break;
+    } else {
+      circ->num_sent_echo_cells++;
+    }
+  }
+  after = circ->num_sent_echo_cells;
+  log_info(LD_CONTROL, "Sent %u echo cells", after - before);
+}
+
 /** The circuit <b>circ</b> has just become open. Take the next
  * step: for rendezvous circuits, we pass circ to the appropriate
  * function in rendclient or rendservice. For general circuits, we
@@ -1670,6 +1695,16 @@ circuit_has_opened(origin_circuit_t *circ)
    * it building again later (e.g. by extending it), we will know not
    * to consider its build time. */
   circ->has_opened = 1;
+
+  circuit_t *c = TO_CIRCUIT(circ);
+  if (c->is_echo_circ) {
+    time_t now = time(NULL);
+    c->echo_stop_time = now + (time_t)c->echo_duration;
+    log_notice(LD_CIRC, "Starting speedtest at %lu, run for %lu until %lu",
+        now, c->echo_duration, c->echo_stop_time);
+    circuit_send_speedtest_cells(circ);
+    return;
+  }
 
   switch (TO_CIRCUIT(circ)->purpose) {
     case CIRCUIT_PURPOSE_C_ESTABLISH_REND:

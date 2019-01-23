@@ -189,6 +189,17 @@ relay_encrypt_cell_outbound(cell_t *cell,
   crypt_path_t *thishop; /* counter for repeated crypts */
   relay_set_digest(layer_hint->crypto.f_digest, cell);
 
+  circuit_t *c = TO_CIRCUIT(circ);
+  if (c->is_echo_circ && c->num_sent_echo_cells > 1) {
+    // Only encrypt the first cell ...
+    // The relay will decrypt the cell regardless. If we encrypt it, then it
+    // will recognize it and proccess it (necessary for it to know this is an
+    // echo circ). After that we expect that the relay has marked the circuit
+    // as an echo circ and will automatically forward all cells back to us
+    // without trying to recognize it
+    return;
+  }
+
   thishop = layer_hint;
   /* moving from farthest to nearest hop */
   do {
