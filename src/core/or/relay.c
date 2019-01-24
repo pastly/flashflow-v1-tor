@@ -296,11 +296,11 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     chan = or_circ->p_chan;
     chan->has_echo_circ = 1;
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
-    cell_queue_t *queue = &or_circ->p_chan_cells;
-    if (queue->n > 40000) {
-      connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
-      //log_notice(LD_OR, "Stopped reading on echo conn for a bit.");
-    }
+    //cell_queue_t *queue = &or_circ->p_chan_cells;
+    //if (queue->n > 40000) {
+    //  connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    //  //log_notice(LD_OR, "Stopped reading on echo conn for a bit.");
+    //}
     circ->num_recv_echo_cells++;
     circ->num_sent_echo_cells++;
     return 0;
@@ -3242,7 +3242,7 @@ append_cell_to_circuit_queue(circuit_t *circ, channel_t *chan,
     streams_blocked = circ->streams_blocked_on_p_chan;
   }
 
-  if (PREDICT_UNLIKELY(queue->n >= max_circuit_cell_queue_size)) {
+  if (0 && PREDICT_UNLIKELY(queue->n >= max_circuit_cell_queue_size)) {
     log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
            "%s circuit has %d cells in its queue, maximum allowed is %d. "
            "Closing circuit for safety reasons.",
