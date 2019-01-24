@@ -617,12 +617,12 @@ kist_scheduler_run(void)
   SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
       init_socket_info(&socket_table, pchan);
       update_socket_info(&socket_table, pchan);
-      //int cmux_num = circuitmux_num_cells(pchan->cmux);
-      //connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
-      //if (cmux_num < 10000 && !connection_is_reading(conn) && pchan->has_echo_circ) {
-      //  connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
-      //  //log_notice(LD_OR, "Started reading on echo conn again.");
-      //}
+      int cmux_num = circuitmux_num_cells(pchan->cmux);
+      connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
+      if (cmux_num < get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
+        connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
+        //log_notice(LD_OR, "Started reading on echo conn again.");
+      }
       //int outbuf_num = channel_outbuf_length(pchan);
       //int cmux_num = circuitmux_num_cells(pchan->cmux);
       //if (cmux_num > 500) {

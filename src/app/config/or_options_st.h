@@ -1036,6 +1036,9 @@ struct or_options_t {
   /* An ordered list of scheduler_types mapped from Schedulers. */
   struct smartlist_t *SchedulerTypes_;
 
+  uint64_t CircQueueHighWater;
+  uint64_t CircQueueLowWater;
+
   uint64_t EchoCircPeriod;
   int EchoCircPrimaryIsEcho;
 

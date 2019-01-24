@@ -606,6 +606,8 @@ static config_var_t option_vars_[] = {
   V(KISTSchedRunInterval,        MSEC_INTERVAL, "0 msec"),
   V(KISTSockBufSizeFactor,       DOUBLE,   "1.0"),
   V(Schedulers,                  CSV,      "KIST,KISTLite,Vanilla"),
+  V(CircQueueHighWater,          UINT64,      "40000"),
+  V(CircQueueLowWater,           UINT64,      "30000"),
   V(EchoCircPeriod,              UINT64,      "1"),
   V(EchoCircPrimaryIsEcho,       BOOL,      "0"),
   V(ShutdownWaitLength,          INTERVAL, "30 seconds"),
