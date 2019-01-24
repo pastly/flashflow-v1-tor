@@ -495,8 +495,9 @@ ewma_pick_active_circuit(circuitmux_t *cmux,
   if (smartlist_len(pol->active_circuit_pqueue) > 0) {
     SMARTLIST_FOREACH(pol->active_circuit_pqueue, cell_ewma_t *, cell_ewma, {
       circ = cell_ewma_to_circuit(cell_ewma);
-      if (circ->is_echo_circ == is_echo_circ)
-        return circ;
+      return circ;
+      //if (circ->is_echo_circ == is_echo_circ)
+      //  return circ;
     });
   }
   return NULL;
