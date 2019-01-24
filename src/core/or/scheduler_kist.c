@@ -616,7 +616,7 @@ kist_scheduler_run(void)
   /* For each pending channel, collect new kernel information */
   SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
       init_socket_info(&socket_table, pchan);
-      //update_socket_info(&socket_table, pchan);
+      update_socket_info(&socket_table, pchan);
       //int cmux_num = circuitmux_num_cells(pchan->cmux);
       //connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
       //if (cmux_num < 10000 && !connection_is_reading(conn) && pchan->has_echo_circ) {
