@@ -5410,6 +5410,7 @@ handle_control_testspeed(control_connection_t *conn, uint32_t len,
   const char *relay_fp = smartlist_get(args, 0);
   const node_t *node = node_get_by_nickname(relay_fp, 0);
   if (!node) {
+    log_warn(LD_CONTROL, "TESTSPEED: can't find router %s", relay_fp);
     connection_printf_to_buf(conn, "552 No such router \"%s\"\r\n", relay_fp);
     return 0;
   }
@@ -5417,8 +5418,10 @@ handle_control_testspeed(control_connection_t *conn, uint32_t len,
   const char *duration_str = smartlist_get(args, 1);
   int ok = 0;
   uint32_t duration = (uint32_t)tor_parse_ulong(duration_str, 10, 0, UINT32_MAX, &ok, NULL);
-  if (!ok)
+  if (!ok) {
+    log_warn(LD_CONTROL, "TESTSPEED: duration not okay %s", duration_str);
     return 0;
+  }
 
   log_notice(LD_CONTROL, "Parsed TESTSPEED args fp=%s dur=%"PRIu32".",
       relay_fp, duration);
