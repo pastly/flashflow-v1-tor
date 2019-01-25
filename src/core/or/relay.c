@@ -297,8 +297,9 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     chan->has_echo_circ = 1;
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
     cell_queue_t *queue = &or_circ->p_chan_cells;
-    if (PREDICT_UNLIKELY(queue->n > get_options()->CircQueueHighWater)) {
-      connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
+    connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(chan)->conn);
+    if (PREDICT_UNLIKELY(queue->n > get_options()->CircQueueHighWater && connection_is_reading(conn))) {
+      connection_stop_reading(conn);
       //log_notice(LD_OR, "Stopped reading on echo conn for a bit.");
     }
     circ->num_recv_echo_cells++;
