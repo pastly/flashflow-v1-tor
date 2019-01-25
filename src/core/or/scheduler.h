@@ -153,10 +153,11 @@ const char *get_scheduler_state_string(int scheduler_state);
 void scheduler_bug_occurred(const channel_t *chan);
 
 smartlist_t *get_channels_pending(void);
+smartlist_t *get_special_channels_pending(void);
 MOCK_DECL(int, scheduler_compare_channels,
           (const void *c1_v, const void *c2_v));
-void scheduler_ev_active(void);
-void scheduler_ev_add(const struct timeval *next_run);
+void scheduler_ev_active(int special);
+void scheduler_ev_add(const struct timeval *next_run, int special);
 
 #ifdef TOR_UNIT_TESTS
 extern smartlist_t *channels_pending;

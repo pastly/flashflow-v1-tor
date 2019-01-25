@@ -589,9 +589,9 @@ kist_scheduler_schedule(void)
      * set to 0) for the maximum allowed run interval (100ms). */
     next_run.tv_usec = (int) ((sched_run_interval - diff) * 1000);
     /* Re-adding an event reschedules it. It does not duplicate it. */
-    scheduler_ev_add(&next_run);
+    scheduler_ev_add(&next_run, 0);
   } else {
-    scheduler_ev_active();
+    scheduler_ev_active(0);
   }
 }
 

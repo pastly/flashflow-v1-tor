@@ -5,8 +5,10 @@
 #include "app/config/config.h"
 #define TOR_CHANNEL_INTERNAL_
 #include "core/or/channel.h"
+#include "core/or/channeltls.h"
 #define SCHEDULER_PRIVATE_
 #include "core/or/scheduler.h"
+#include "core/or/or_connection_st.h"
 
 /*****************************************************************************
  * Other internal data
@@ -23,9 +25,9 @@
 static int
 have_work(void)
 {
-  smartlist_t *cp = get_channels_pending();
+  smartlist_t *cp = get_special_channels_pending();
   IF_BUG_ONCE(!cp) {
-    return 0; // channels_pending doesn't exist so... no work?
+    return 0; // special_channels_pending doesn't exist so... no work?
   }
   return smartlist_len(cp) > 0;
 }
@@ -40,7 +42,7 @@ vanilla_scheduler_schedule(void)
   }
 
   /* Activate our event so it can process channels. */
-  scheduler_ev_active();
+  scheduler_ev_active(1);
 }
 
 static void
@@ -48,9 +50,19 @@ vanilla_scheduler_run(void)
 {
   int n_cells, n_chans_before, n_chans_after;
   ssize_t flushed, flushed_this_time;
-  smartlist_t *cp = get_channels_pending();
+  smartlist_t *cp = get_special_channels_pending();
   smartlist_t *to_readd = NULL;
   channel_t *chan = NULL;
+
+  /* For each pending channel, collect new kernel information */
+  SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
+      int cmux_num = circuitmux_num_cells(pchan->cmux);
+      connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
+      if (cmux_num < get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
+        connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
+        //log_notice(LD_OR, "Started reading on echo conn again.");
+      }
+  } SMARTLIST_FOREACH_END(pchan);
 
   log_debug(LD_SCHED, "We have a chance to run the scheduler");
 
@@ -62,7 +74,7 @@ vanilla_scheduler_run(void)
                                 scheduler_compare_channels,
                                 offsetof(channel_t, sched_heap_idx));
     IF_BUG_ONCE(!chan) {
-      /* Some-freaking-how a NULL got into the channels_pending. That should
+      /* Some-freaking-how a NULL got into the special_channels_pending. That should
        * never happen, but it should be harmless to ignore it and keep looping.
        */
       continue;
