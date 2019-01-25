@@ -2949,18 +2949,7 @@ set_streams_blocked_on_circ(circuit_t *circ, channel_t *chan,
   if (!block && circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
     origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
     if (time(NULL) >= circ->echo_stop_time) {
-      //control_event_speedtest_complete(origin_circ);
-      log_notice(
-          LD_OR, "Completed speedtest on circ %"PRIu32". Received %lu "
-          "cells, sent %lu cells in %"PRIu32" seconds with %s",
-          origin_circ->global_identifier,
-          circ->num_recv_echo_cells,
-          circ->num_sent_echo_cells,
-          circ->echo_duration,
-          !origin_circ->cpath ?
-            "<null>" :
-            extend_info_describe(origin_circ->cpath->extend_info));
-      circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+      control_stop_speedtest_circuit(circ);
     } else {
       circuit_send_speedtest_cells(origin_circ);
     }

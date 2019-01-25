@@ -109,6 +109,7 @@
 #include "feature/rend/rend_service_descriptor_st.h"
 #include "feature/nodelist/routerinfo_st.h"
 #include "feature/nodelist/routerlist_st.h"
+#include "feature/nodelist/describe.h"
 #include "core/or/socks_request_st.h"
 
 #ifdef HAVE_UNISTD_H
@@ -5375,6 +5376,25 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</p>\n"
   "</body>\n"
   "</html>\n";
+
+void
+control_stop_speedtest_circuit(circuit_t *circ)
+{
+  tor_assert(time(NULL) >= circ->echo_stop_time);
+  origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
+  //control_event_speedtest_complete(origin_circ);
+  log_notice(
+      LD_OR, "Completed speedtest on circ %"PRIu32". Received %lu "
+      "cells, sent %lu cells in %"PRIu32" seconds with %s",
+      origin_circ->global_identifier,
+      circ->num_recv_echo_cells,
+      circ->num_sent_echo_cells,
+      circ->echo_duration,
+      !origin_circ->cpath ?
+        "<null>" :
+        extend_info_describe(origin_circ->cpath->extend_info));
+  circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+}
 
 static int
 handle_control_testspeed(control_connection_t *conn, uint32_t len,

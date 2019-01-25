@@ -1678,6 +1678,9 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   }
   after = circ->num_sent_echo_cells;
   log_info(LD_CONTROL, "Sent %u echo cells", after - before);
+  if (time(NULL) >= circ->echo_stop_time) {
+    control_stop_speedtest_circuit(circ);
+  }
 }
 
 /** The circuit <b>circ</b> has just become open. Take the next
