@@ -124,11 +124,9 @@ static void adjust_exit_policy_from_exitpolicy_failure(origin_circuit_t *circ,
 /** Stop reading on edge connections when we have this many cells
  * waiting on the appropriate queue. */
 #define CELL_QUEUE_HIGHWATER_SIZE 256
-//#define CELL_QUEUE_HIGHWATER_SIZE 2040 /* 2040 cells * 514 bytes/cell == ~1 MiB */
 /** Start reading from edge connections again when we get down to this many
  * cells. */
 #define CELL_QUEUE_LOWWATER_SIZE 64
-//#define CELL_QUEUE_LOWWATER_SIZE (CELL_QUEUE_HIGHWATER_SIZE / 4)
 
 /** Stats: how many relay cells have originated at this hop, or have
  * been relayed onward (not recognized at this hop)?
@@ -235,27 +233,14 @@ circuit_update_channel_usage(circuit_t *circ, cell_t *cell)
  *
  * Return -<b>reason</b> on failure.
  */
-static uint8_t did_init = 0;
-static monotime_t recognized_last_time;
-static monotime_t unrecognized_last_time;
-static int64_t recognized_accum = 0;
-static int64_t unrecognized_accum = 0;
 int
 circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
                            cell_direction_t cell_direction)
 {
-  if (PREDICT_UNLIKELY(!did_init)) {
-    monotime_get(&recognized_last_time);
-    monotime_get(&unrecognized_last_time);
-    did_init = 1;
-  }
   channel_t *chan = NULL;
   crypt_path_t *layer_hint=NULL;
   char recognized=0;
   int reason;
-  monotime_t start, end;
-  int64_t diff, time_passed;
-  monotime_get(&start);
 
   tor_assert(cell);
   tor_assert(circ);
@@ -264,7 +249,7 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
   if (circ->marked_for_close)
     return 0;
 
-  /* The way Rob did it (1/2) */
+  /* Echo circ on the client side */
   if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
     //log_notice(LD_OR, "Got echo cell (1/2)");
     circ->num_recv_echo_cells++;
@@ -280,15 +265,7 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
 
   circuit_update_channel_usage(circ, cell);
 
-  /* The way Matt did it */
-  //if (!recognized && circ->is_echo_circ) {
-  //  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
-  //  cell->circ_id = or_circ->p_circ_id; /* switch directions */
-  //  channel_t *chan = or_circ->p_chan;
-  //  append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
-  //  return 0;
-  //}
-  /* The way Rob did it (2/2) */
+  /* Echo circ on the relay side */
   if (circ->is_echo_circ && CIRCUIT_IS_ORCIRC(circ)) {
     //log_notice(LD_OR, "Got echo cell (2/2)");
     or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
@@ -347,16 +324,6 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
         return reason;
       }
     }
-    monotime_get(&end);
-    recognized_accum += monotime_diff_nsec(&start, &end);
-    time_passed = monotime_diff_nsec(&recognized_last_time, &end);
-    if (time_passed >= 1000 * 1000 * 1000) {
-      log_info(
-        LD_SCHED, "%i of last %i ns handling recognized cell",
-	recognized_accum, time_passed);
-      recognized_accum = 0;
-      recognized_last_time = end;
-    }
     return 0;
   }
 
@@ -413,16 +380,6 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
                                   * the cells. */
 
   append_cell_to_circuit_queue(circ, chan, cell, cell_direction, 0);
-  monotime_get(&end);
-  unrecognized_accum += monotime_diff_nsec(&start, &end);
-  time_passed = monotime_diff_nsec(&unrecognized_last_time, &end);
-  if (time_passed >= 1000 * 1000 * 1000) {
-    log_info(
-      LD_SCHED, "%i of last %i ns handling unrecognized cell",
-      unrecognized_accum, time_passed);
-    unrecognized_accum = 0;
-    unrecognized_last_time = end;
-  }
   return 0;
 }
 
@@ -1576,29 +1533,6 @@ handle_relay_speedtest_startstop_cell(
   }
 }
 
-static void
-handle_relay_echo_cell(cell_t *cell, circuit_t *circ, edge_connection_t *conn)
-{
-  channel_t *chan = NULL;
-  relay_header_t rh;
-  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
-
-  /* note that we've handled echo cells */
-  circ->is_echo_circ = 1;
-
-  cell->circ_id = or_circ->p_circ_id; /* switch directions */
-  chan = or_circ->p_chan;
-
-  //relay_encrypt_cell_inbound(cell, or_circ);
-  append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
-  int n = or_circ->p_chan_cells.n;
-  if (n > CELL_QUEUE_HIGHWATER_SIZE) {
-    if (connection_is_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn))) {
-      //log_notice(LD_GENERAL, "Stopping reading on a ping circ");
-      connection_stop_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
-    }
-  }
-}
 #undef RH_LEN
 
 /** An incoming relay cell has arrived on circuit <b>circ</b>. If
@@ -1681,9 +1615,6 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
 //      log_info(domain,"Got a relay-level padding cell. Dropping.");
       return 0;
     case RELAY_COMMAND_PING:
-      /* Matt's code */
-      //handle_relay_echo_cell(cell, circ, conn);
-      /* Rob's code */
       circ->is_echo_circ = 1;
       log_notice(domain,
           "SPEEDTEST/ECHO/PING cell on circ %u/%u, marked as echo circ",
@@ -3129,18 +3060,6 @@ channel_flush_from_first_active_circuit, (channel_t *chan, int max))
      * to write to this circuit? */
     if (streams_blocked && queue->n <= CELL_QUEUE_LOWWATER_SIZE)
       set_streams_blocked_on_circ(circ, chan, 0, 0); /* unblock streams */
-
-    /* Begin ping cell stuff */
-    if (CIRCUIT_IS_ORCIRC(circ)) {
-      or_circ = TO_OR_CIRCUIT(circ);
-      if (or_circ->have_seen_ping_cell && queue->n <= CELL_QUEUE_LOWWATER_SIZE) {
-        if (!connection_is_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn))) {
-          //log_notice(LD_GENERAL, "Starting to read on a ping circ again %d in queue", queue->n);
-          connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn));
-        }
-      }
-    }
-    /* End ping cell stuff */
 
     /* If n_flushed < max still, loop around and pick another circuit */
   }

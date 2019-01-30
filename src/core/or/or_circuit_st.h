@@ -66,8 +66,6 @@ struct or_circuit_t {
    *  statistics. */
   unsigned int circuit_carries_hs_traffic_stats : 1;
 
-  unsigned int have_seen_ping_cell : 1;
-
   /** Number of cells that were removed from circuit queue; reset every
    * time when writing buffer stats to disk. */
   uint32_t processed_cells;

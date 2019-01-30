@@ -1009,7 +1009,7 @@ static int mock_more_to_flush = 0;
 static int mock_update_socket_info_limit = 0;
 
 static ssize_t
-channel_flush_some_cells_mock_var(channel_t *chan, ssize_t num_cells, int is_echo_circ)
+channel_flush_some_cells_mock_var(channel_t *chan, ssize_t num_cells)
 {
   (void) chan;
   (void) num_cells;
