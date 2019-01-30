@@ -1132,8 +1132,7 @@ circuitmux_set_num_cells(circuitmux_t *cmux, circuit_t *circ,
 
 circuit_t *
 circuitmux_get_first_active_circuit(circuitmux_t *cmux,
-                                    destroy_cell_queue_t **destroy_queue_out,
-                                    int is_echo_circ)
+                                    destroy_cell_queue_t **destroy_queue_out)
 {
   circuit_t *circ = NULL;
 
@@ -1160,7 +1159,7 @@ circuitmux_get_first_active_circuit(circuitmux_t *cmux,
     tor_assert(cmux->n_cells > 0);
     /* Do we have a policy-provided circuit selector? */
     circ = cmux->policy->pick_active_circuit(
-        cmux, cmux->policy_data, is_echo_circ);
+        cmux, cmux->policy_data);
     cmux->last_cell_was_destroy = 0;
   } else {
     tor_assert(cmux->n_cells == 0);
@@ -1276,7 +1275,7 @@ circuitmux_append_destroy_cell(channel_t *chan,
      * get called, and we can start putting more data onto the buffer then.
      */
     log_debug(LD_GENERAL, "Primed a buffer.");
-    channel_flush_from_first_active_circuit(chan, 1, 0);
+    channel_flush_from_first_active_circuit(chan, 1);
   }
 }
 

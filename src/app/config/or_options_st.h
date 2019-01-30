@@ -1039,9 +1039,6 @@ struct or_options_t {
   uint64_t CircQueueHighWater;
   uint64_t CircQueueLowWater;
 
-  uint64_t EchoCircPeriod;
-  int EchoCircPrimaryIsEcho;
-
   /** List of files that were opened by %include in torrc and torrc-defaults */
   struct smartlist_t *FilesOpenedByIncludes;
 

@@ -79,7 +79,7 @@ void destroy_cell_queue_append(destroy_cell_queue_t *queue,
 
 void channel_unlink_all_circuits(channel_t *chan, smartlist_t *detached_out);
 MOCK_DECL(int, channel_flush_from_first_active_circuit,
-          (channel_t *chan, int max, int is_echo_circ));
+          (channel_t *chan, int max));
 void update_circuit_on_cmux_(circuit_t *circ, cell_direction_t direction,
                              const char *file, int lineno);
 #define update_circuit_on_cmux(circ, direction) \

@@ -56,8 +56,7 @@ struct circuitmux_policy_s {
                             unsigned int n_cells);
   /* Choose a circuit */
   circuit_t * (*pick_active_circuit)(circuitmux_t *cmux,
-                                     circuitmux_policy_data_t *pol_data,
-                                     int is_echo_circ);
+                                     circuitmux_policy_data_t *pol_data);
   /* Optional: channel comparator for use by the scheduler */
   int (*cmp_cmux)(circuitmux_t *cmux_1, circuitmux_policy_data_t *pol_data_1,
                   circuitmux_t *cmux_2, circuitmux_policy_data_t *pol_data_2);
@@ -134,8 +133,7 @@ int64_t circuitmux_count_queued_destroy_cells(const channel_t *chan,
 
 /* Channel interface */
 circuit_t * circuitmux_get_first_active_circuit(circuitmux_t *cmux,
-                                    destroy_cell_queue_t **destroy_queue_out,
-                                    int is_echo_circ);
+                                    destroy_cell_queue_t **destroy_queue_out);
 void circuitmux_notify_xmit_cells(circuitmux_t *cmux, circuit_t *circ,
                                   unsigned int n_cells);
 void circuitmux_notify_xmit_destroy(circuitmux_t *cmux);
