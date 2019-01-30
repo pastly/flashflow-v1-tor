@@ -577,9 +577,6 @@ kist_scheduler_schedule(void)
 static void
 kist_scheduler_run(void)
 {
-  monotime_t start_time, end_time;
-  monotime_get(&start_time);
-  uint32_t cell_count_this_time = 0;
   /* Define variables */
   channel_t *chan = NULL; // current working channel
   /* The last distinct chan served in a sched loop. */
@@ -662,7 +659,6 @@ kist_scheduler_run(void)
                               (CELL_MAX_NETWORK_SIZE + TLS_PER_CELL_OVERHEAD));
         if (currently_counting_cells)
           cell_count += flush_result;
-          cell_count_this_time += flush_result;
       } else {
         /* XXX: This can happen because tor sometimes does flush in an
          * opportunistic way cells from the circuit to the outbuf so the
@@ -775,13 +771,6 @@ kist_scheduler_run(void)
   }
 
   monotime_get(&scheduler_last_run);
-  //if (cell_count_this_time >= 500) {
-  //  end_time = scheduler_last_run;
-  //  int64_t run_time_ms = monotime_diff_nsec(&start_time, &end_time);
-  //  log_info(
-  //    LD_SCHED, "Scheduler took %i ns to run and scheduled %u cells",
-  //    run_time_ms, cell_count_this_time);
-  //}
   if (currently_counting_cells) {
     monotime_t now = scheduler_last_run;
     int64_t diff = monotime_diff_msec(&last_report_time, &now);
