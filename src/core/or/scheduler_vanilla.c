@@ -47,14 +47,15 @@ vanilla_scheduler_schedule(void)
   scheduler_ev_active(vanilla_scheduler.is_special);
 }
 
-static void
-vanilla_scheduler_run(void)
+static int32_t
+vanilla_scheduler_run(int32_t scheduler_cell_write_limit)
 {
   int n_cells, n_chans_before, n_chans_after;
   ssize_t flushed, flushed_this_time;
   smartlist_t *cp = get_special_channels_pending();
   smartlist_t *to_readd = NULL;
   channel_t *chan = NULL;
+  int32_t num_scheduled_cells = 0;
 
   /* For each pending channel, collect new kernel information */
   SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
@@ -70,7 +71,7 @@ vanilla_scheduler_run(void)
 
   n_chans_before = smartlist_len(cp);
 
-  while (smartlist_len(cp) > 0) {
+  while (smartlist_len(cp) > 0 && scheduler_cell_write_limit > 0) {
     /* Pop off a channel */
     chan = smartlist_pqueue_pop(cp,
                                 scheduler_compare_channels,
@@ -98,6 +99,9 @@ vanilla_scheduler_run(void)
         if (flushed_this_time <= 0) break;
         flushed += flushed_this_time;
       }
+
+      num_scheduled_cells += flushed;
+      scheduler_cell_write_limit -= flushed;
 
       if (flushed < n_cells) {
         /* We ran out of cells to flush */
@@ -167,6 +171,8 @@ vanilla_scheduler_run(void)
   n_chans_after = smartlist_len(cp);
   log_debug(LD_SCHED, "Scheduler handled %d of %d pending channels",
             n_chans_before - n_chans_after, n_chans_before);
+
+  return num_scheduled_cells;
 }
 
 /* Stores the vanilla scheduler function pointers. */

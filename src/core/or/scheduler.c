@@ -177,6 +177,8 @@ static struct mainloop_event_t *run_special_sched_ev = NULL;
 
 static int have_logged_kist_suddenly_disabled = 0;
 
+static int32_t scheduler_cell_write_limit = 0;
+
 /*****************************************************************************
  * Scheduling system static function definitions
  *
@@ -210,6 +212,7 @@ static void
 scheduler_evt_callback(mainloop_event_t *event, void *arg)
 {
   (void) arg;
+  int32_t cell_limit_this_time;
 
   scheduler_t *sched = event == run_sched_ev ?
     the_scheduler :
@@ -219,13 +222,44 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
       LD_SCHED, "%s sched event callback called",
       get_scheduler_type_string(sched->type));
 
+  if (!get_options()->SplitScheduler) {
+    // If not using two schedulers, no write limits ever
+    cell_limit_this_time = INT_MAX;
+  } else if (sched->is_special) {
+    // If two sched and this one is the special one, don't limit it
+    cell_limit_this_time = INT_MAX;
+  } else if (scheduler_cell_write_limit == 0) {
+    // If two sched, this isn't the special one, and the special one hasn't
+    // sent anything recently, don't limit it
+    cell_limit_this_time = INT_MAX;
+  } else {
+    // If two sched, this isn't the special one, and the special one did send
+    // recently, do limit it
+    cell_limit_this_time = scheduler_cell_write_limit;
+  }
+
   /* Run the scheduler. This is a mandatory function. */
 
   /* We might as well assert on this. If this function doesn't exist, no cells
    * are getting scheduled. Things are very broken. scheduler_t says the run()
    * function is mandatory. */
   tor_assert(sched->run);
-  sched->run();
+  int32_t num_scheduled_cells = sched->run(cell_limit_this_time);
+  log_info(LD_SCHED, "%s scheduled %d cells",
+      get_scheduler_type_string(sched->type), num_scheduled_cells);
+  tor_assert(num_scheduled_cells >= 0);
+  if (get_options()->SplitScheduler) {
+    // If using two schedulers, we need to adjust the write limit now
+    if (!sched->is_special)
+      // If this was the regular scheduler that ran, reset the limit
+      scheduler_cell_write_limit = 0;
+    else
+      // Otherwise increase the limit for the next time the regular sched runs
+      scheduler_cell_write_limit += num_scheduled_cells;
+    log_info(LD_SCHED, "adjusted sched write limit to %d",
+        scheduler_cell_write_limit);
+  }
+
 
   /* Schedule itself back in if it has more work. */
 

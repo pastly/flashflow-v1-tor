@@ -574,11 +574,12 @@ kist_scheduler_schedule(void)
 }
 
 /* Function of the scheduler interface: run() */
-static void
-kist_scheduler_run(void)
+static int32_t
+kist_scheduler_run(int32_t scheduler_cell_write_limit)
 {
   /* Define variables */
   channel_t *chan = NULL; // current working channel
+  int32_t num_scheduled_cells = 0;
   /* The last distinct chan served in a sched loop. */
   channel_t *prev_chan = NULL;
   int flush_result = 0; // temporarily store results from flush calls
@@ -612,7 +613,7 @@ kist_scheduler_run(void)
       smartlist_len(cp));
 
   /* The main scheduling loop. Loop until there are no more pending channels */
-  while (smartlist_len(cp) > 0) {
+  while (smartlist_len(cp) > 0 && scheduler_cell_write_limit > 0) {
     /* get best channel */
     chan = smartlist_pqueue_pop(cp, scheduler_compare_channels,
                                 offsetof(channel_t, sched_heap_idx));
@@ -683,6 +684,8 @@ kist_scheduler_run(void)
     /* Decide what to do with the channel now */
 
     tor_assert(flush_result >= 0);
+    num_scheduled_cells += flush_result;
+    scheduler_cell_write_limit -= num_scheduled_cells;
 
     if (flush_result == 0 && channel_more_to_flush(chan)) {
       if (!to_readd) {
@@ -780,6 +783,8 @@ kist_scheduler_run(void)
       last_report_time = now;
     }
   }
+
+  return num_scheduled_cells;
 }
 
 /*****************************************************************************

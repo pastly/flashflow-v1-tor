@@ -68,7 +68,7 @@ typedef struct scheduler_s {
    * their circuit queues to output buffers in an intelligent manner. We
    * should do this quickly. When we are done, we'll try to schedule() ourself
    * if more work needs to be done to setup the next scheduling run. */
-  void (*run)(void);
+  int32_t (*run)(int32_t);
 
   /*
    * External event not related to the scheduler but that can influence it.
