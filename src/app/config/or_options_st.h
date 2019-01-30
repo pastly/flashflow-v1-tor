@@ -1030,6 +1030,7 @@ struct or_options_t {
   /** A multiplier for the KIST per-socket limit calculation. */
   double KISTSockBufSizeFactor;
 
+  int SplitScheduler;
   /** The list of scheduler type string ordered by priority that is first one
    * has to be tried first. Default: KIST,KISTLite,Vanilla */
   struct smartlist_t *Schedulers;

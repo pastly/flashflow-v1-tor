@@ -605,6 +605,7 @@ static config_var_t option_vars_[] = {
   OBSOLETE("SchedulerMaxFlushCells__"),
   V(KISTSchedRunInterval,        MSEC_INTERVAL, "0 msec"),
   V(KISTSockBufSizeFactor,       DOUBLE,   "1.0"),
+  V(SplitScheduler,              BOOL,     "0"),
   V(Schedulers,                  CSV,      "KIST,KISTLite,Vanilla"),
   V(CircQueueHighWater,          UINT64,      "40000"),
   V(CircQueueLowWater,           UINT64,      "30000"),
@@ -4733,6 +4734,7 @@ options_transition_allowed(const or_options_t *old,
   NO_CHANGE_BOOL(NoExec);
   NO_CHANGE_INT(OwningControllerFD);
   NO_CHANGE_BOOL(DisableSignalHandlers);
+  NO_CHANGE_BOOL(SplitScheduler);
 
   if (sandbox_is_active()) {
 #define SB_NOCHANGE_STR(opt)                      \

@@ -155,8 +155,8 @@
  *****************************************************************************/
 
 /** DOCDOC */
-STATIC const scheduler_t *the_scheduler;
-static const scheduler_t *the_special_scheduler;
+STATIC scheduler_t *the_scheduler;
+static scheduler_t *the_special_scheduler;
 
 /**
  * We keep a list of channels that are pending - i.e, have cells to write
@@ -241,9 +241,6 @@ static void
 select_scheduler(void)
 {
   scheduler_t *new_scheduler = NULL;
-  the_scheduler = get_kist_scheduler();
-  the_special_scheduler = get_vanilla_scheduler();
-  return;
 
 #ifdef TOR_UNIT_TESTS
   /* This is hella annoying to set in the options for every test that passes
@@ -321,6 +318,16 @@ select_scheduler(void)
 
   /* Set the chosen scheduler. */
   the_scheduler = new_scheduler;
+  the_scheduler->is_special = 0;
+  if (get_options()->SplitScheduler) {
+    the_special_scheduler = (the_scheduler->type == SCHEDULER_VANILLA ?
+        get_kist_scheduler() :
+        get_vanilla_scheduler());
+    the_special_scheduler->is_special = 1;
+  } else {
+    the_special_scheduler = the_scheduler;
+    tor_assert(the_special_scheduler->is_special == 0);
+  }
 }
 
 /**
@@ -344,9 +351,10 @@ set_scheduler(void)
   /* From the options, select the scheduler type to set. */
   select_scheduler();
   tor_assert(the_scheduler);
-  tor_assert(the_scheduler->type == SCHEDULER_KIST);
   tor_assert(the_special_scheduler);
-  tor_assert(the_special_scheduler->type == SCHEDULER_VANILLA);
+  if (get_options()->SplitScheduler) {
+    tor_assert(the_scheduler->type != the_special_scheduler->type);
+  }
 
   /* We look at the pointer difference in case the old sched and new sched
    * share the same scheduler object, as is the case with KIST and KISTLite. */
@@ -364,9 +372,18 @@ set_scheduler(void)
 
   /* Finally we notice log if we switched schedulers. We use the type in case
    * two schedulers share a scheduler object. */
-  if (old_scheduler_type != the_scheduler->type) {
-    log_info(LD_CONFIG, "Scheduler type %s has been enabled.",
-             get_scheduler_type_string(the_scheduler->type));
+  if (get_options()->SplitScheduler) {
+    log_notice(
+        LD_CONFIG, "Using %s for regular traffic",
+        get_scheduler_type_string(the_scheduler->type));
+    log_notice(
+        LD_CONFIG, "Using %s for special traffic",
+        get_scheduler_type_string(the_special_scheduler->type));
+  } else {
+    tor_assert(the_scheduler->type == the_special_scheduler->type);
+    log_notice(
+        LD_CONFIG, "Using %s for all traffic",
+        get_scheduler_type_string(the_scheduler->type));
   }
 }
 
@@ -513,12 +530,14 @@ scheduler_free_all(void)
 {
   log_debug(LD_SCHED, "Shutting down scheduler");
 
+  int have_special = get_options()->SplitScheduler;
+
   if (run_sched_ev) {
     mainloop_event_free(run_sched_ev);
     run_sched_ev = NULL;
   }
 
-  if (run_special_sched_ev) {
+  if (have_special && run_special_sched_ev) {
     mainloop_event_free(run_special_sched_ev);
     run_special_sched_ev = NULL;
   }
@@ -529,7 +548,7 @@ scheduler_free_all(void)
     channels_pending = NULL;
   }
 
-  if (special_channels_pending) {
+  if (have_special && special_channels_pending) {
     smartlist_free(special_channels_pending);
     special_channels_pending = NULL;
   }
@@ -539,7 +558,7 @@ scheduler_free_all(void)
   }
   the_scheduler = NULL;
 
-  if (the_special_scheduler && the_special_scheduler->free_all) {
+  if (have_special && the_special_scheduler && the_special_scheduler->free_all) {
     the_special_scheduler->free_all();
   }
   the_special_scheduler = NULL;
@@ -683,9 +702,14 @@ scheduler_init(void)
   }
 
   run_sched_ev = mainloop_event_new(scheduler_evt_callback, NULL);
-  run_special_sched_ev = mainloop_event_new(scheduler_evt_callback, NULL);
   channels_pending = smartlist_new();
-  special_channels_pending = smartlist_new();
+  if (get_options()->SplitScheduler) {
+    run_special_sched_ev = mainloop_event_new(scheduler_evt_callback, NULL);
+    special_channels_pending = smartlist_new();
+  } else {
+    run_special_sched_ev = run_sched_ev;
+    special_channels_pending = channels_pending;
+  }
 
   set_scheduler();
 }

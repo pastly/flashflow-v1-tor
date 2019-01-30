@@ -17,6 +17,8 @@
 /* Maximum cells to flush in a single call to channel_flush_some_cells(); */
 #define MAX_FLUSH_CELLS 1000
 
+static scheduler_t vanilla_scheduler;
+
 /*****************************************************************************
  * Externally called function implementations
  *****************************************************************************/
@@ -42,7 +44,7 @@ vanilla_scheduler_schedule(void)
   }
 
   /* Activate our event so it can process channels. */
-  scheduler_ev_active(1);
+  scheduler_ev_active(vanilla_scheduler.is_special);
 }
 
 static void
@@ -60,7 +62,7 @@ vanilla_scheduler_run(void)
       connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
       if (cmux_num < get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
         connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
-        //log_notice(LD_OR, "Started reading on echo conn again.");
+        log_notice(LD_OR, "Started reading on echo conn again. (Vanilla)");
       }
   } SMARTLIST_FOREACH_END(pchan);
 
@@ -177,6 +179,7 @@ static scheduler_t vanilla_scheduler = {
   .schedule = vanilla_scheduler_schedule,
   .run = vanilla_scheduler_run,
   .on_new_options = NULL,
+  .is_special = 0,
 };
 
 scheduler_t *

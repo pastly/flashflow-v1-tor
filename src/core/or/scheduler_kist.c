@@ -113,6 +113,8 @@ static int currently_counting_cells = 0;
 static uint32_t report_interval_ms = 0;
 static monotime_t last_report_time;
 
+static scheduler_t kist_scheduler;
+
 /*****************************************************************************
  * Internally called function implementations
  *****************************************************************************/
@@ -565,9 +567,9 @@ kist_scheduler_schedule(void)
      * set to 0) for the maximum allowed run interval (100ms). */
     next_run.tv_usec = (int) ((sched_run_interval - diff) * 1000);
     /* Re-adding an event reschedules it. It does not duplicate it. */
-    scheduler_ev_add(&next_run, 0);
+    scheduler_ev_add(&next_run, kist_scheduler.is_special);
   } else {
-    scheduler_ev_active(0);
+    scheduler_ev_active(kist_scheduler.is_special);
   }
 }
 
@@ -597,7 +599,7 @@ kist_scheduler_run(void)
       connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
       if (cmux_num < get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
         connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
-        //log_notice(LD_OR, "Started reading on echo conn again.");
+        log_notice(LD_OR, "Started reading on echo conn again. (KIST)");
       }
       //int outbuf_num = channel_outbuf_length(pchan);
       //int cmux_num = circuitmux_num_cells(pchan->cmux);
@@ -805,6 +807,7 @@ static scheduler_t kist_scheduler = {
   .schedule = kist_scheduler_schedule,
   .run = kist_scheduler_run,
   .on_new_options = kist_scheduler_on_new_options,
+  .is_special = 0,
 };
 
 /* Return the KIST scheduler object. If it didn't exists, return a newly

@@ -93,6 +93,8 @@ typedef struct scheduler_s {
    * scheduler should use this as an opportunity to parse and cache torrc
    * options so that it doesn't have to call get_options() all the time. */
   void (*on_new_options)(void);
+
+  int is_special : 1;
 } scheduler_t;
 
 /*****************************************************************************
