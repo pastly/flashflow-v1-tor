@@ -1511,8 +1511,6 @@ handle_relay_speedtest_startstop_cell(
   or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
   channel_t *chan = or_circ->p_chan;
 
-  circ->is_echo_circ = 1;
-
   parse_inbound_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
   if (ss.is_start) {
     log_notice(
