@@ -13,6 +13,7 @@
 #define TOR_CHANNEL_INTERNAL_
 #include "core/or/channeltls.h"
 #include "lib/evloop/compat_libevent.h"
+#include "core/or/relay.h"
 
 #include "core/or/or_connection_st.h"
 
@@ -179,6 +180,11 @@ static int have_logged_kist_suddenly_disabled = 0;
 
 static int32_t scheduler_cell_write_limit = 0;
 
+static int scheduler_currently_counting_cells = 0;
+static uint32_t scheduler_reporting_interval_ms = 0;
+static uint32_t scheduler_reporting_cell_count = 0;
+static monotime_t scheduler_last_report_time;
+
 /*****************************************************************************
  * Scheduling system static function definitions
  *
@@ -248,6 +254,20 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
   log_info(LD_SCHED, "%s scheduled %d cells",
       get_scheduler_type_string(sched->type), num_scheduled_cells);
   tor_assert(num_scheduled_cells >= 0);
+  if (scheduler_currently_counting_cells) {
+    monotime_t now;
+    int64_t diff;
+    if (get_options()->SplitScheduler && !sched->is_special) {
+      scheduler_reporting_cell_count += num_scheduled_cells;
+    }
+    monotime_get(&now);
+    diff = monotime_diff_msec(&scheduler_last_report_time, &now);
+    if (diff >= scheduler_reporting_interval_ms) {
+      report_cell_count(scheduler_reporting_cell_count);
+      scheduler_reporting_cell_count = 0;
+      scheduler_last_report_time = now;
+    }
+  }
   if (get_options()->SplitScheduler) {
     // If using two schedulers, we need to adjust the write limit now
     if (!sched->is_special)
@@ -515,6 +535,22 @@ scheduler_compare_channels, (const void *c1_v, const void *c2_v))
  *
  * Functions that can be accessed from anywhere in Tor.
  *****************************************************************************/
+
+void
+scheduler_reset_cell_counter_and_start_counting(uint32_t report_interval_ms_)
+{
+  scheduler_currently_counting_cells = 1;
+  scheduler_reporting_interval_ms = report_interval_ms_;
+  monotime_get(&scheduler_last_report_time);
+  scheduler_reporting_cell_count = 0;
+}
+
+uint32_t
+scheduler_get_cell_counter_and_stop_counting(void)
+{
+  scheduler_currently_counting_cells = 0;
+  return scheduler_reporting_cell_count;
+}
 
 /**
  * This is how the scheduling system is notified of Tor's configuration

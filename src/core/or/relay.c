@@ -1472,7 +1472,7 @@ report_cell_count(uint32_t cell_count)
     return;
   if (saved_coord_circ->state != CIRCUIT_STATE_OPEN)
     return;
-  log_notice(LD_EDGE, "Would report %u cells now.", cell_count);
+  log_notice(LD_EDGE, "Reporting %u cells now.", cell_count);
 
   cell_t c;
   relay_header_t rh;
