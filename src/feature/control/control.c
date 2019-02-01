@@ -128,6 +128,14 @@
 #include "lib/evloop/procmon.h"
 #include "lib/evloop/compat_libevent.h"
 
+static control_connection_t *speedtest_control_connection = NULL;
+control_connection_t *
+get_speedtest_control_connection()
+{
+  return speedtest_control_connection;
+}
+static circuit_t *speedtest_circuit = NULL;
+
 /** Yield true iff <b>s</b> is the state of a control_connection_t that has
  * finished authentication and is accepting commands. */
 #define STATE_IS_OPEN(s) ((s) == CONTROL_CONN_STATE_OPEN)
@@ -1352,6 +1360,7 @@ static const struct control_event_t control_event_table[] = {
   { EVENT_HS_DESC_CONTENT, "HS_DESC_CONTENT" },
   { EVENT_NETWORK_LIVENESS, "NETWORK_LIVENESS" },
   { EVENT_TESTSPEED, "TESTSPEED"},
+  { EVENT_SPEEDTESTING, "SPEEDTESTING"},
   { 0, NULL },
 };
 
@@ -5378,6 +5387,42 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</html>\n";
 
 void
+control_speedtest_report_cell_counts()
+{
+  if (!speedtest_circuit)
+    return;
+  if (!speedtest_control_connection)
+    return;
+  if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_TESTING)
+    return;
+  uint32_t num_recv = speedtest_circuit->num_recv_echo_cells * 498;
+  uint32_t num_sent = speedtest_circuit->num_sent_echo_cells * 498;
+  log_notice(
+      LD_CONTROL, "Reporting %u/%u recv/sent measurement bytes",
+      num_recv, num_sent);
+  connection_printf_to_buf(
+      speedtest_control_connection, "650 SPEEDTESTING %u %u\r\n",
+      num_recv, num_sent);
+  speedtest_circuit->num_recv_echo_cells = 0;
+  speedtest_circuit->num_sent_echo_cells = 0;
+}
+
+const char *
+control_speedtest_state_to_string(int state)
+{
+  const char *s;
+  //log_notice(LD_CONTROL, "Getting speedtest state string for %d", state);
+  switch (state) {
+    case CTRL_SPEEDTEST_STATE_NONE: s = "NONE"; break;
+    case CTRL_SPEEDTEST_STATE_CONNECTING: s = "CONNECTING"; break;
+    case CTRL_SPEEDTEST_STATE_CONNECTED: s = "CONNECTED"; break;
+    case CTRL_SPEEDTEST_STATE_TESTING: s = "TESTING"; break;
+    default: tor_assert_unreached(); break;
+  };
+  return s;
+}
+
+void
 control_stop_speedtest_circuit(circuit_t *circ)
 {
   tor_assert(time(NULL) >= circ->echo_stop_time);
@@ -5394,37 +5439,53 @@ control_stop_speedtest_circuit(circuit_t *circ)
         "<null>" :
         extend_info_describe(origin_circ->cpath->extend_info));
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+  if (speedtest_control_connection) {
+    control_change_speedtest_state(
+        speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+    speedtest_control_connection = NULL;
+  }
+  speedtest_circuit = NULL;
 }
 
-static int
-handle_control_testspeed(control_connection_t *conn, uint32_t len,
-    const char *body) {
-  smartlist_t *args;
-  (void)len; // body is null-terminated, so ignore len
-  args = getargs_helper("TESTSPEED", conn, body, 2, 2);
-  if (!args)
-    return 0;
-
+void
+control_change_speedtest_state(control_connection_t *c, int new)
+{
+  const char *old_state, *new_state;
+  old_state = control_speedtest_state_to_string(c->speedtest_state);
+  new_state = control_speedtest_state_to_string(new);
   log_notice(
-      LD_CONTROL, "Received TESTSPEED command: %s", body ? body : "NULL");
+      LD_CONTROL, "Changing ctrl conn speedtest state from %s to %s",
+      old_state, new_state);
+  c->speedtest_state = new;
+  if (old_state != new_state) {
+    if (c->speedtest_state == CTRL_SPEEDTEST_STATE_CONNECTED) {
+      connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", 42069);
+    } else if (c->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
+      connection_printf_to_buf(c, "250 SPEEDTESTING %u %u\r\n", 0, 0);
+    }
+  }
+  return;
+}
+
+static const char *
+handle_control_testspeed_when_none(
+    control_connection_t *conn, smartlist_t *args)
+{
+  tor_assert(!speedtest_control_connection);
+  speedtest_control_connection = conn;
+  tor_assert(!speedtest_circuit);
+  tor_assert(conn->speedtest_state == CTRL_SPEEDTEST_STATE_NONE);
+  if (smartlist_len(args) != 1) {
+    return "Expected one argument (a relay fp)";
+  }
   const char *relay_fp = smartlist_get(args, 0);
   const node_t *node = node_get_by_nickname(relay_fp, 0);
   if (!node) {
     log_warn(LD_CONTROL, "TESTSPEED: can't find router %s", relay_fp);
-    connection_printf_to_buf(conn, "552 No such router \"%s\"\r\n", relay_fp);
-    return 0;
+    return "Cannot find relay with that fp";
   }
 
-  const char *duration_str = smartlist_get(args, 1);
-  int ok = 0;
-  uint32_t duration = (uint32_t)tor_parse_ulong(duration_str, 10, 0, UINT32_MAX, &ok, NULL);
-  if (!ok) {
-    log_warn(LD_CONTROL, "TESTSPEED: duration not okay %s", duration_str);
-    return 0;
-  }
-
-  log_notice(LD_CONTROL, "Parsed TESTSPEED args fp=%s dur=%"PRIu32".",
-      relay_fp, duration);
+  control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_CONNECTING);
 
   // Make new circuit
   origin_circuit_t *origin_circ = origin_circuit_init(CIRCUIT_PURPOSE_C_GENERAL, 0);
@@ -5435,8 +5496,7 @@ handle_control_testspeed(control_connection_t *conn, uint32_t len,
         "descriptor, or which doesn't have any addresses that are allowed by "
         "the firewall configuration. Marking circuit for closing.");
     circuit_mark_for_close(TO_CIRCUIT(origin_circ), -END_CIRC_REASON_CONNECTFAILED);
-    connection_write_str_to_buf("551 Couldn't start circuit\r\n", conn);
-    return 0;
+    return "Couldn't start circuit";
   }
 
   circuit_append_new_exit(origin_circ, info);
@@ -5450,8 +5510,7 @@ handle_control_testspeed(control_connection_t *conn, uint32_t len,
     log_warn(
         LD_CONTROL, "Couldn't circuit_handle_first_hop. err_reason=%d",
         err_reason);
-    connection_write_str_to_buf("551 Couldn't start circuit\r\n", conn);
-    return 0;
+    return "Couldn't extend circuit";
   }
 
   log_notice(LD_CONTROL, "Started a circuit build for TESTSPEED on circ %u",
@@ -5460,15 +5519,100 @@ handle_control_testspeed(control_connection_t *conn, uint32_t len,
   // Mark the circuit as a speedtest circuit
   circuit_t *circ = TO_CIRCUIT(origin_circ);
   circ->is_echo_circ = 1;
-  //circ->num_sent_echo_cells = 0;
-  //circ->num_recv_echo_cells = 0;
-  circ->echo_duration = duration;
   conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
+  conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
+  tor_assert(!speedtest_circuit);
+  speedtest_circuit = circ;
 
   // Send events
   control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
-  connection_printf_to_buf(conn, "250 SPEEDTESTING %u\r\n",
-      origin_circ->global_identifier);
+  return NULL;
+}
+
+static const char *
+handle_control_testspeed_when_connecting(
+    control_connection_t *conn, smartlist_t *args)
+{
+  (void)conn;
+  (void)args;
+  tor_assert_unreached();
+  return "Not implemented (when_connecting)";
+}
+
+static const char *
+handle_control_testspeed_when_connected(
+    control_connection_t *conn, smartlist_t *args)
+{
+  (void)conn;
+  (void)args;
+  tor_assert(speedtest_circuit);
+  if (smartlist_len(args) != 1) {
+    return "Expected one argument (an uint32 duration [secs])";
+  }
+  const char *dur_str = smartlist_get(args, 0);
+  int ok = 0;
+  uint32_t duration = (uint32_t)tor_parse_ulong(
+      dur_str, 10, 0, UINT32_MAX, &ok, NULL);
+  if (!ok) {
+    return "Unable to parse duration as uint32";
+  }
+  log_notice(LD_CONTROL, "Told to TESTSPEED for %u secs", duration);
+  speedtest_circuit->echo_duration = duration;
+  speedtest_circuit->echo_last_report_time = time(NULL);
+  speedtest_circuit->echo_stop_time = time(NULL) + (time_t)duration;
+  speedtest_circuit->num_sent_echo_cells = 0;
+  speedtest_circuit->num_recv_echo_cells = 0;
+  speedtest_circuit->echo_duration = duration;
+  control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_TESTING);
+  circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(speedtest_circuit));
+  return NULL;
+}
+
+static const char *
+handle_control_testspeed_when_testing(
+    control_connection_t *conn, smartlist_t *args)
+{
+  (void)conn;
+  (void)args;
+  return "Not implemented (when_testing)";
+}
+
+static int
+handle_control_testspeed(
+    control_connection_t *conn, uint32_t len, const char *body) {
+  smartlist_t *args;
+  const char *err_msg = NULL;
+  (void)len; // body is null-terminated, so ignore len
+  args = getargs_helper("TESTSPEED", conn, body, 1, 2);
+  if (!args) {
+    log_warn(LD_CONTROL, "Could not parse TESTSPEED arguments");
+    return 0;
+  }
+
+  log_notice(
+      LD_CONTROL,
+      "Received TESTSPEED command while in state %s: %s",
+      control_speedtest_state_to_string(conn->speedtest_state),
+      body ? body : "NULL");
+  switch (conn->speedtest_state) {
+    case CTRL_SPEEDTEST_STATE_NONE:
+      err_msg = handle_control_testspeed_when_none(conn, args); break;
+    case CTRL_SPEEDTEST_STATE_CONNECTING:
+      err_msg = handle_control_testspeed_when_connecting(conn, args); break;
+    case CTRL_SPEEDTEST_STATE_CONNECTED:
+      err_msg = handle_control_testspeed_when_connected(conn, args); break;
+    case CTRL_SPEEDTEST_STATE_TESTING:
+      err_msg = handle_control_testspeed_when_testing(conn, args); break;
+    default: tor_assert_unreached(); break;
+  };
+  if (err_msg) {
+    connection_printf_to_buf(conn, "552 %s\r\n", err_msg);
+    speedtest_control_connection = NULL;
+    speedtest_circuit = NULL;
+    control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_NONE);
+  } else {
+    //connection_printf_to_buf(conn, "250 SPEEDTESTING %u\r\n", 42069);
+  }
   return 0;
 }
 

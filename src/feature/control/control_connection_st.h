@@ -40,6 +40,8 @@ struct control_connection_t {
   /** A control command that we're reading from the inbuf, but which has not
    * yet arrived completely. */
   char *incoming_cmd;
+
+  int speedtest_state;
 };
 
 #endif

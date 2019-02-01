@@ -279,8 +279,8 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
       connection_stop_reading(conn);
       log_notice(LD_OR, "Stopped reading on echo conn for a bit.");
     }
-    circ->num_recv_echo_cells++;
-    circ->num_sent_echo_cells++;
+    circ->num_recv_echo_cells += 1;
+    circ->num_sent_echo_cells += 1;
     return 0;
   }
 

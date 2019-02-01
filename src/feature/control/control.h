@@ -12,6 +12,16 @@
 #ifndef TOR_CONTROL_H
 #define TOR_CONTROL_H
 
+#define CTRL_SPEEDTEST_STATE_NONE 0
+#define CTRL_SPEEDTEST_STATE_CONNECTING 1
+#define CTRL_SPEEDTEST_STATE_CONNECTED 2
+#define CTRL_SPEEDTEST_STATE_TESTING 3
+void control_speedtest_report_cell_counts(void);
+const char *control_speedtest_state_to_string(int);
+void control_change_speedtest_state(control_connection_t *, int);
+control_connection_t * get_speedtest_control_connection(void);
+
+
 /** Used to indicate the type of a circuit event passed to the controller.
  * The various types are defined in control-spec.txt */
 typedef enum circuit_status_event_t {
@@ -294,7 +304,8 @@ void control_free_all(void);
 #define EVENT_HS_DESC_CONTENT         0x0022
 #define EVENT_NETWORK_LIVENESS        0x0023
 #define EVENT_TESTSPEED               0x0024
-#define EVENT_MAX_                    0x0024
+#define EVENT_SPEEDTESTING            0x0025
+#define EVENT_MAX_                    0x0025
 
 /* sizeof(control_connection_t.event_mask) in bits, currently a uint64_t */
 #define EVENT_CAPACITY_               0x0040

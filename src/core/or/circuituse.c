@@ -70,6 +70,13 @@
 #include "core/or/origin_circuit_st.h"
 #include "core/or/socks_request_st.h"
 
+#define TOR_CHANNEL_INTERNAL_
+#include "core/or/channeltls.h"
+#undef TOR_CHANNEL_INTERNAL_
+#include "core/or/or_connection_st.h"
+#include "feature/control/control.h"
+#include "feature/control/control_connection_st.h"
+
 static void circuit_expire_old_circuits_clientside(void);
 static void circuit_increment_failure_count(void);
 
@@ -1673,12 +1680,21 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
           "Circuit is closed");
       break;
     } else {
-      circ->num_sent_echo_cells++;
+      circ->num_sent_echo_cells += 1;
     }
   }
   after = circ->num_sent_echo_cells;
   log_info(LD_CONTROL, "Sent %u echo cells", after - before);
-  if (time(NULL) >= circ->echo_stop_time) {
+  time_t now = time(NULL);
+  if (now >= circ->echo_last_report_time + 1) {
+    //log_notice(
+    //    LD_CONTROL, "Would report %u/%u cells",
+    //    circ->num_recv_echo_cells,
+    //    circ->num_sent_echo_cells);
+    control_speedtest_report_cell_counts();
+    circ->echo_last_report_time = now;
+  }
+  if (now >= circ->echo_stop_time) {
     control_stop_speedtest_circuit(circ);
   }
 }
@@ -1702,11 +1718,12 @@ circuit_has_opened(origin_circuit_t *circ)
   circuit_t *c = TO_CIRCUIT(circ);
   if (c->is_echo_circ) {
     time_t now = time(NULL);
-    c->echo_stop_time = now + (time_t)c->echo_duration;
     c->n_chan->has_echo_circ = 1;
-    log_notice(LD_CIRC, "Starting speedtest at %lu, run for %lu until %lu",
-        now, c->echo_duration, c->echo_stop_time);
-    circuit_send_speedtest_cells(circ);
+    //log_notice(LD_CIRC, "Starting speedtest at %lu, run for %lu until %lu",
+    //    now, c->echo_duration, c->echo_stop_time);
+    //circuit_send_speedtest_cells(circ);
+    control_change_speedtest_state(
+        get_speedtest_control_connection(), CTRL_SPEEDTEST_STATE_CONNECTED);
     return;
   }
 
