@@ -116,7 +116,7 @@ static scheduler_t kist_scheduler;
 
 
 /* Little helper function to get the length of a channel's output buffer */
-static inline size_t
+size_t
 channel_outbuf_length(channel_t *chan)
 {
   tor_assert(chan);

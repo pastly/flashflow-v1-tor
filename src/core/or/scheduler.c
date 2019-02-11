@@ -244,6 +244,33 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     cell_limit_this_time = scheduler_cell_write_limit;
   }
 
+  smartlist_t *pending_list = sched == the_scheduler ?
+    channels_pending :
+    special_channels_pending;
+
+#include <sys/ioctl.h>
+#include <netinet/tcp.h>
+#include <linux/sockios.h>
+  SMARTLIST_FOREACH_BEGIN(pending_list, channel_t *, chan) {
+    int sock = TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->s;
+    uint64_t t = monotime_absolute_msec();
+    uint32_t outbuf = channel_outbuf_length(chan);
+    uint32_t cmux = circuitmux_num_cells(chan->cmux);
+    uint32_t sndqlen = 0;
+    uint32_t notsent = 0;
+    struct tcp_info tcp;
+    socklen_t tcp_info_len = sizeof(tcp);
+    tor_assert(getsockopt(sock, SOL_TCP, TCP_INFO, (void *)&(tcp), &tcp_info_len) >= 0);
+    tor_assert(ioctl(sock, SIOCOUTQNSD, &notsent) >= 0);
+    tor_assert(ioctl(sock, SIOCOUTQ, &sndqlen) >= 0);
+    log_info(
+        LD_SCHED, "%lu %s sock=%i cwnd=%u unacked=%u sndqlen=%u notsent=%u "
+        "outbuf=%u cmux=%u",
+        t, get_scheduler_type_string(sched->type),
+        sock, tcp.tcpi_snd_cwnd, tcp.tcpi_unacked, sndqlen, notsent,
+        outbuf, cmux);
+  } SMARTLIST_FOREACH_END(chan);
+
   /* Run the scheduler. This is a mandatory function. */
 
   /* We might as well assert on this. If this function doesn't exist, no cells
