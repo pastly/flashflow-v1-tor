@@ -251,8 +251,9 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
    * function is mandatory. */
   tor_assert(sched->run);
   int32_t num_scheduled_cells = sched->run(cell_limit_this_time);
-  log_info(LD_SCHED, "%s scheduled %d cells",
-      get_scheduler_type_string(sched->type), num_scheduled_cells);
+  log_info(LD_SCHED, "%s scheduled %d cells (lim %d)",
+      get_scheduler_type_string(sched->type),
+      num_scheduled_cells, cell_limit_this_time);
   tor_assert(num_scheduled_cells >= 0);
   if (scheduler_currently_counting_cells) {
     monotime_t now;
