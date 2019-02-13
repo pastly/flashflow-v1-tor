@@ -678,7 +678,7 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
 
     tor_assert(flush_result >= 0);
     num_scheduled_cells += flush_result;
-    scheduler_cell_write_limit -= num_scheduled_cells;
+    scheduler_cell_write_limit -= flush_result;
 
     if (flush_result == 0 && channel_more_to_flush(chan)) {
       if (!to_readd) {
