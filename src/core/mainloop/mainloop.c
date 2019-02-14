@@ -48,6 +48,7 @@
 
 #define MAINLOOP_PRIVATE
 #include "core/or/or.h"
+#include "core/mainloop/mainloop.h"
 
 #include "app/config/config.h"
 #include "app/config/statefile.h"

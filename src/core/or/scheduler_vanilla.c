@@ -9,6 +9,7 @@
 #define SCHEDULER_PRIVATE_
 #include "core/or/scheduler.h"
 #include "core/or/or_connection_st.h"
+#include "core/mainloop/mainloop.h"
 
 /*****************************************************************************
  * Other internal data
@@ -58,10 +59,10 @@ vanilla_scheduler_run(int32_t scheduler_cell_write_limit)
   int32_t num_scheduled_cells = 0;
 
   /* For each pending channel, collect new kernel information */
-  SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
+  SMARTLIST_FOREACH_BEGIN(cp, channel_t *, pchan) {
       int cmux_num = circuitmux_num_cells(pchan->cmux);
       connection_t *conn = TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn);
-      if (cmux_num < get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
+      if (cmux_num < (int)get_options()->CircQueueLowWater && !connection_is_reading(conn) && pchan->has_echo_circ) {
         connection_start_reading(TO_CONN(BASE_CHAN_TO_TLS(pchan)->conn));
         log_notice(LD_OR, "Started reading on echo conn again. (Vanilla)");
       }

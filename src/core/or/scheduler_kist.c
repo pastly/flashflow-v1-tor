@@ -585,7 +585,7 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
   outbuf_table_t outbuf_table = HT_INITIALIZER();
 
   /* For each pending channel, collect new kernel information */
-  SMARTLIST_FOREACH_BEGIN(cp, const channel_t *, pchan) {
+  SMARTLIST_FOREACH_BEGIN(cp, channel_t *, pchan) {
       init_socket_info(&socket_table, pchan);
       update_socket_info(&socket_table, pchan);
       int cmux_num = circuitmux_num_cells(pchan->cmux);
