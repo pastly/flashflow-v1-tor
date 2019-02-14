@@ -244,6 +244,8 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     cell_limit_this_time = scheduler_cell_write_limit;
   }
 
+#ifdef HAVE_KIST_SUPPORT
+
   smartlist_t *pending_list = sched == the_scheduler ?
     channels_pending :
     special_channels_pending;
@@ -270,6 +272,7 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
         sock, tcp.tcpi_snd_cwnd, tcp.tcpi_unacked, sndqlen, notsent,
         outbuf, cmux);
   } SMARTLIST_FOREACH_END(chan);
+#endif /* HAVE_KIST_SUPPORT */
 
   /* Run the scheduler. This is a mandatory function. */
 
