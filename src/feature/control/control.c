@@ -5448,6 +5448,14 @@ control_stop_speedtest_circuit(circuit_t *circ)
 }
 
 void
+control_change_speedtest_state_to_connected(
+    control_connection_t *c, circid_t circ_id)
+{
+  control_change_speedtest_state(c, CTRL_SPEEDTEST_STATE_CONNECTED);
+  connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", circ_id);
+}
+
+void
 control_change_speedtest_state(control_connection_t *c, int new)
 {
   const char *old_state, *new_state;
@@ -5458,9 +5466,7 @@ control_change_speedtest_state(control_connection_t *c, int new)
       old_state, new_state);
   c->speedtest_state = new;
   if (old_state != new_state) {
-    if (c->speedtest_state == CTRL_SPEEDTEST_STATE_CONNECTED) {
-      connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", 42069);
-    } else if (c->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
+    if (c->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
       connection_printf_to_buf(c, "250 SPEEDTESTING %u %u\r\n", 0, 0);
     }
   }

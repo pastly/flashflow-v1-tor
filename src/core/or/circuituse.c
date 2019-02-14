@@ -1722,8 +1722,8 @@ circuit_has_opened(origin_circuit_t *circ)
     //log_notice(LD_CIRC, "Starting speedtest at %lu, run for %lu until %lu",
     //    now, c->echo_duration, c->echo_stop_time);
     //circuit_send_speedtest_cells(circ);
-    control_change_speedtest_state(
-        get_speedtest_control_connection(), CTRL_SPEEDTEST_STATE_CONNECTED);
+    control_change_speedtest_state_to_connected(
+        get_speedtest_control_connection(), circ->global_identifier);
     return;
   }
 
