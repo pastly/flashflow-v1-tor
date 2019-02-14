@@ -234,13 +234,13 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
   } else if (sched->is_special) {
     // If two sched and this one is the special one, don't limit it
     cell_limit_this_time = INT_MAX;
-  } else if (scheduler_cell_write_limit == 0) {
-    // If two sched, this isn't the special one, and the special one hasn't
-    // sent anything recently, don't limit it
+  } else if (!scheduler_currently_counting_cells) {
+    // If two sched, this isn't the special one, and a measurement is not going
+    // on, then don't limit it
     cell_limit_this_time = INT_MAX;
   } else {
-    // If two sched, this isn't the special one, and the special one did send
-    // recently, do limit it
+    // If two sched, this isn't the special one, and a measurement is going on,
+    // then do limit it.
     cell_limit_this_time = scheduler_cell_write_limit;
   }
 
