@@ -179,6 +179,7 @@ static struct mainloop_event_t *run_special_sched_ev = NULL;
 static int have_logged_kist_suddenly_disabled = 0;
 
 static int32_t scheduler_cell_write_limit = 0;
+static double scheduler_cell_write_limit_factor = 0.50;
 
 static int scheduler_currently_counting_cells = 0;
 static uint32_t scheduler_reporting_interval_ms = 0;
@@ -241,7 +242,23 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
   } else {
     // If two sched, this isn't the special one, and a measurement is going on,
     // then do limit it.
-    cell_limit_this_time = scheduler_cell_write_limit;
+
+    /* We allow the fraction of traffic that is special vs the fraction that is
+     * regular to be configured. Consider the following ratio:
+     *
+     * f = y / (y+x)
+     *
+     * The user sets f in their torrc. x is the amount of special traffic since
+     * the last regular traffic scheduling round, and y is the amount of
+     * regular traffic we are about to allow. Solving for y, you get
+     *
+     * y = f * x / (1-f)
+     *
+     * And that's the logic behind this math here.
+     */
+    cell_limit_this_time = (int32_t)(
+      scheduler_cell_write_limit_factor * (double)scheduler_cell_write_limit /
+      (1.0 - scheduler_cell_write_limit_factor));
   }
 
 #ifdef HAVE_KIST_SUPPORT
@@ -470,6 +487,11 @@ set_scheduler(void)
         LD_CONFIG, "Using %s for all traffic",
         get_scheduler_type_string(the_scheduler->type));
   }
+
+  /* This torrc option is an int between 1 and 99 (inclusive) and represents a
+   * percent. Convert to a double. */
+  scheduler_cell_write_limit_factor =
+    (double)get_options()->SplitSchedulerPercentSpecial / (double)100;
 }
 
 /*****************************************************************************
