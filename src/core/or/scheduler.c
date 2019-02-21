@@ -274,7 +274,8 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     int sock = TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->s;
     uint64_t t = monotime_absolute_msec();
     uint32_t outbuf = channel_outbuf_length(chan);
-    uint32_t cmux = circuitmux_num_cells(chan->cmux);
+    uint32_t cmux_regular = circuitmux_num_regular_cells(chan->cmux);
+    uint32_t cmux_destroy = circuitmux_num_destroy_cells(chan->cmux);
     uint32_t sndqlen = 0;
     uint32_t notsent = 0;
     struct tcp_info tcp;
@@ -284,10 +285,10 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     tor_assert(ioctl(sock, SIOCOUTQ, &sndqlen) >= 0);
     log_info(
         LD_SCHED, "%lu %s sock=%i cwnd=%u unacked=%u sndqlen=%u notsent=%u "
-        "outbuf=%u cmux=%u",
+        "outbuf=%u cmux=%u cmux_destroy=%u",
         t, get_scheduler_type_string(sched->type),
         sock, tcp.tcpi_snd_cwnd, tcp.tcpi_unacked, sndqlen, notsent,
-        outbuf, cmux);
+        outbuf, cmux_regular, cmux_destroy);
   } SMARTLIST_FOREACH_END(chan);
 #endif /* HAVE_KIST_SUPPORT */
 

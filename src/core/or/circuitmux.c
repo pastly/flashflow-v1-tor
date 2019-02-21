@@ -744,6 +744,19 @@ circuitmux_num_cells_for_circuit(circuitmux_t *cmux, circuit_t *circ)
  * Query total number of available cells on a circuitmux
  */
 
+unsigned int
+circuitmux_num_destroy_cells(circuitmux_t *cmux)
+{
+  tor_assert(cmux);
+  return cmux->destroy_cell_queue.n;
+}
+unsigned int
+circuitmux_num_regular_cells(circuitmux_t *cmux)
+{
+  tor_assert(cmux);
+  return cmux->n_cells;
+}
+
 MOCK_IMPL(unsigned int,
 circuitmux_num_cells, (circuitmux_t *cmux))
 {
