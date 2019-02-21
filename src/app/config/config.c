@@ -606,7 +606,7 @@ static config_var_t option_vars_[] = {
   V(KISTSchedRunInterval,        MSEC_INTERVAL, "0 msec"),
   V(KISTSockBufSizeFactor,       DOUBLE,   "1.0"),
   V(SplitScheduler,              BOOL,     "0"),
-  V(SplitSchedulerPercentSpecial,UINT64,   "50"),
+  V(SplitSchedulerPercentBackground,UINT64,   "50"),
   V(Schedulers,                  CSV,      "KIST,KISTLite,Vanilla"),
   V(CircQueueHighWater,          UINT64,   "40000"),
   V(CircQueueLowWater,           UINT64,   "30000"),
@@ -3287,13 +3287,13 @@ options_validate_scheduler(or_options_t *options, char **msg)
     return -1;
   }
 
-  if (options->SplitScheduler && options->SplitSchedulerPercentSpecial < 1) {
+  if (options->SplitScheduler && options->SplitSchedulerPercentBackground < 1) {
     REJECT(
-      "SplitSchedulerPercentSpecial must be at least 1. To disalbe "
+      "SplitSchedulerPercentBackground must be at least 1. To disalbe "
       "split scheduling, set SplitScheduler to 0");
   }
-  if (options->SplitScheduler && options->SplitSchedulerPercentSpecial > 99) {
-    REJECT("SplitSchedulerPercentSpecial cannot be more than 99 (percent)");
+  if (options->SplitScheduler && options->SplitSchedulerPercentBackground > 99) {
+    REJECT("SplitSchedulerPercentBackground cannot be more than 99 (percent)");
   }
 
   return 0;

@@ -491,7 +491,7 @@ set_scheduler(void)
   /* This torrc option is an int between 1 and 99 (inclusive) and represents a
    * percent. Convert to a double. */
   scheduler_cell_write_limit_factor =
-    (double)get_options()->SplitSchedulerPercentSpecial / (double)100;
+    (double)get_options()->SplitSchedulerPercentBackground / (double)100;
 }
 
 /*****************************************************************************
