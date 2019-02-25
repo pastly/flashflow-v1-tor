@@ -345,6 +345,7 @@ connection_remove(connection_t *conn)
 static void
 connection_unlink(connection_t *conn)
 {
+  log_notice(LD_OR, "Closing connection sock=%d", conn->s);
   connection_about_to_close_connection(conn);
   if (conn->conn_array_index >= 0) {
     connection_remove(conn);

@@ -2879,6 +2879,7 @@ set_streams_blocked_on_circ(circuit_t *circ, channel_t *chan,
   if (!block && circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
     origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
     if (time(NULL) >= circ->echo_stop_time) {
+      log_notice(LD_OR, "It's time to stop the speedtest (relay.c)");
       control_stop_speedtest_circuit(circ);
     } else {
       circuit_send_speedtest_cells(origin_circ);

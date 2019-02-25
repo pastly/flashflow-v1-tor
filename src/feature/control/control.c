@@ -41,6 +41,7 @@
 #include "app/main/main.h"
 #include "core/mainloop/connection.h"
 #include "core/mainloop/mainloop.h"
+#define TOR_CHANNEL_INTERNAL_
 #include "core/or/channel.h"
 #include "core/or/channeltls.h"
 #include "core/or/circuitbuild.h"
@@ -4101,6 +4102,13 @@ handle_control_closecircuit(control_connection_t *conn, uint32_t len,
   if (!circ)
     return 0;
 
+  circuit_t *c = TO_CIRCUIT(circ);
+  if (c->is_echo_circ) {
+    control_stop_speedtest_circuit(c);
+    send_control_done(conn);
+    return 0;
+  }
+
   if (!safe || !circ->p_streams) {
     circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_REQUESTED);
   }
@@ -5425,7 +5433,10 @@ control_speedtest_state_to_string(int state)
 void
 control_stop_speedtest_circuit(circuit_t *circ)
 {
-  tor_assert(time(NULL) >= circ->echo_stop_time);
+  //tor_assert(time(NULL) >= circ->echo_stop_time);
+  if (time(NULL) < circ->echo_stop_time) {
+    log_warn(LD_CONTROL, "Stopping a speedtest circ before the scheduled stop time");
+  }
   origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
   //control_event_speedtest_complete(origin_circ);
   log_notice(
@@ -5439,6 +5450,8 @@ control_stop_speedtest_circuit(circuit_t *circ)
         "<null>" :
         extend_info_describe(origin_circ->cpath->extend_info));
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+  connection_mark_for_close(TO_CONN(BASE_CHAN_TO_TLS(circ->n_chan)->conn));
+  //channel_mark_for_close(circ->n_chan);
   if (speedtest_control_connection) {
     control_change_speedtest_state(
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);

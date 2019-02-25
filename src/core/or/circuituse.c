@@ -1695,6 +1695,7 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
     circ->echo_last_report_time = now;
   }
   if (now >= circ->echo_stop_time) {
+    log_notice(LD_CONTROL, "It's time to stop the speedtest (circuituse.c)");
     control_stop_speedtest_circuit(circ);
   }
 }

@@ -622,6 +622,8 @@ circuit_close_all_marked(void)
       circuit_remove_from_origin_circuit_list(TO_ORIGIN_CIRCUIT(circ));
     }
 
+    if (circ->is_echo_circ)
+      log_notice(LD_OR, "Actually freeing echo circ now");
     circuit_about_to_free(circ);
     circuit_free(circ);
   } SMARTLIST_FOREACH_END(circ);
@@ -2203,12 +2205,12 @@ circuit_mark_for_close_, (circuit_t *circ, int reason, int line,
   smartlist_add(circuits_pending_close, circ);
   mainloop_schedule_postloop_cleanup();
 
-  log_info(LD_GENERAL, "Circuit %u (id: %" PRIu32 ") marked for close at "
-                       "%s:%d (orig reason: %d, new reason: %d)",
+  log_notice(LD_GENERAL, "Circuit %u (id: %" PRIu32 ") marked for close at "
+                       "%s:%d (orig reason: %d, new reason: %d) echo: %d",
            circ->n_circ_id,
            CIRCUIT_IS_ORIGIN(circ) ?
               TO_ORIGIN_CIRCUIT(circ)->global_identifier : 0,
-           file, line, orig_reason, reason);
+           file, line, orig_reason, reason, circ->is_echo_circ);
 }
 
 /** Called immediately before freeing a marked circuit <b>circ</b> from
