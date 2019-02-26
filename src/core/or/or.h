@@ -730,11 +730,11 @@ typedef struct or_handshake_state_t or_handshake_state_t;
 
 /** When adding cells to an OR connection's outbuf, keep adding until the
  * outbuf is at least this long, or we run out of cells. */
-#define OR_CONN_HIGHWATER (32*1024)
+#define OR_CONN_HIGHWATER (320*1024)
 
 /** Add cells to an OR connection's outbuf whenever the outbuf's data length
  * drops below this size. */
-#define OR_CONN_LOWWATER (16*1024)
+#define OR_CONN_LOWWATER (160*1024)
 
 typedef struct connection_t connection_t;
 typedef struct control_connection_t control_connection_t;
