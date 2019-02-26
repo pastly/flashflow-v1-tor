@@ -747,6 +747,11 @@ scheduler_channel_has_waiting_cells,(channel_t *chan))
 
   /* First, check if it's also writeable */
   if (chan->scheduler_state == SCHED_CHAN_WAITING_FOR_CELLS) {
+    /* If channel is special (measurement traffic), then don't add to
+     * pending unless there's enough cells in the cmux */
+    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < 32) {
+      return;
+    }
     /*
      * It's in channels_waiting_for_cells, so it shouldn't be in any of
      * the other lists.  It has waiting cells now, so it goes to
@@ -905,6 +910,11 @@ scheduler_channel_wants_writes(channel_t *chan)
 
   /* If it's already in waiting_to_write, we can put it in pending */
   if (chan->scheduler_state == SCHED_CHAN_WAITING_TO_WRITE) {
+    /* If channel is special (measurement traffic), then don't add to
+     * pending unless there's enough cells in the cmux */
+    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < 32) {
+      return;
+    }
     /*
      * It can write now, so it goes to pending_list.
      */
