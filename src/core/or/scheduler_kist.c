@@ -752,6 +752,10 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
         LD_SCHED,
         "KIST stopped sending on all because global_write_limit (last was %d)",
         sock);
+    // Update EWMA of any chans that didn't get the chance to write this time
+    SMARTLIST_FOREACH_BEGIN(cp, channel_t *, chan_i) {
+      circuitmux_touch(chan_i->cmux);
+    } SMARTLIST_FOREACH_END(chan_i);
   }
 
   /* Write the outbuf of any channels that still have data */

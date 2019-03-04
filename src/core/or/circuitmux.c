@@ -1183,6 +1183,14 @@ circuitmux_get_first_active_circuit(circuitmux_t *cmux,
   return circ;
 }
 
+void
+circuitmux_touch(circuitmux_t *cmux)
+{
+  if (cmux->policy->touch) {
+    cmux->policy->touch(cmux->policy_data);
+  }
+}
+
 /**
  * Notify the circuitmux that cells have been sent on a circuit; this
  * is called from channel.c.

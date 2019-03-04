@@ -60,6 +60,9 @@ struct circuitmux_policy_s {
   /* Optional: channel comparator for use by the scheduler */
   int (*cmp_cmux)(circuitmux_t *cmux_1, circuitmux_policy_data_t *pol_data_1,
                   circuitmux_t *cmux_2, circuitmux_policy_data_t *pol_data_2);
+  /* Optional: Give the policy a chance to update state even though no
+   * particular event happened */
+  void (*touch)(circuitmux_policy_data_t *pol_data);
 };
 
 /*
@@ -140,6 +143,7 @@ circuit_t * circuitmux_get_first_active_circuit(circuitmux_t *cmux,
 void circuitmux_notify_xmit_cells(circuitmux_t *cmux, circuit_t *circ,
                                   unsigned int n_cells);
 void circuitmux_notify_xmit_destroy(circuitmux_t *cmux);
+void circuitmux_touch(circuitmux_t *cmux);
 
 /* Circuit interface */
 MOCK_DECL(void, circuitmux_attach_circuit, (circuitmux_t *cmux,

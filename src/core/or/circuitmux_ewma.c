@@ -216,6 +216,9 @@ static int
 ewma_cmp_cmux(circuitmux_t *cmux_1, circuitmux_policy_data_t *pol_data_1,
               circuitmux_t *cmux_2, circuitmux_policy_data_t *pol_data_2);
 
+static void
+ewma_touch(circuitmux_policy_data_t *pol_data);
+
 /*** EWMA global variables ***/
 
 /** The per-tick scale factor to be used when computing cell-count EWMA
@@ -236,7 +239,8 @@ circuitmux_policy_t ewma_policy = {
   /*.notify_set_n_cells =*/ NULL, /* EWMA doesn't need this */
   /*.notify_xmit_cells =*/ ewma_notify_xmit_cells,
   /*.pick_active_circuit =*/ ewma_pick_active_circuit,
-  /*.cmp_cmux =*/ ewma_cmp_cmux
+  /*.cmp_cmux =*/ ewma_cmp_cmux,
+  /*.touch =*/ ewma_touch,
 };
 
 /** Have we initialized the ewma tick-counting logic? */
@@ -413,6 +417,23 @@ ewma_notify_circ_inactive(circuitmux_t *cmux,
   cdata = TO_EWMA_POL_CIRC_DATA(pol_circ_data);
 
   remove_cell_ewma(pol, &(cdata->cell_ewma));
+}
+
+static void
+ewma_touch(circuitmux_policy_data_t *pol_data)
+{
+  ewma_policy_data_t *pol = NULL;
+  unsigned int tick;
+  double fractional_tick;
+  tor_assert(pol_data);
+  pol = TO_EWMA_POL_DATA(pol_data);
+
+  /* Rescale the EWMAs if needed */
+  tick = cell_ewma_get_current_tick_and_fraction(&fractional_tick);
+
+  if (tick != pol->active_circuit_pqueue_last_recalibrated) {
+    scale_active_circuits(pol, tick);
+  }
 }
 
 /**
