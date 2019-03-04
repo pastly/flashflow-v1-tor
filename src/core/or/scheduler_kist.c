@@ -747,8 +747,11 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
   } /* End of main scheduling loop */
 
   if (scheduler_cell_write_limit <= 0) {
+    int sock = chan ? TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->s : -1;
     log_info(
-        LD_SCHED, "KIST stopped sending on all because global_write_limit");
+        LD_SCHED,
+        "KIST stopped sending on all because global_write_limit (last was %d)",
+        sock);
   }
 
   /* Write the outbuf of any channels that still have data */
