@@ -14,6 +14,7 @@
 #include "core/or/channeltls.h"
 #include "lib/evloop/compat_libevent.h"
 #include "core/or/relay.h"
+#include "core/or/circuitmux_ewma.h"
 
 #include "core/or/or_connection_st.h"
 
@@ -276,6 +277,7 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     uint32_t outbuf = channel_outbuf_length(chan);
     uint32_t cmux_regular = circuitmux_num_regular_cells(chan->cmux);
     uint32_t cmux_destroy = circuitmux_num_destroy_cells(chan->cmux);
+    double ewma_cell_count = circuitmux_if_ewma_get_cell_count(chan->cmux);
     uint32_t sndqlen = 0;
     uint32_t notsent = 0;
     struct tcp_info tcp;
@@ -285,10 +287,10 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     tor_assert(ioctl(sock, SIOCOUTQ, &sndqlen) >= 0);
     log_info(
         LD_SCHED, "%lu %s sock=%i cwnd=%u unacked=%u sndqlen=%u notsent=%u "
-        "outbuf=%u cmux=%u cmux_destroy=%u",
+        "outbuf=%u cmux=%u cmux_destroy=%u ewma_cell_count=%f",
         t, get_scheduler_type_string(sched->type),
         sock, tcp.tcpi_snd_cwnd, tcp.tcpi_unacked, sndqlen, notsent,
-        outbuf, cmux_regular, cmux_destroy);
+        outbuf, cmux_regular, cmux_destroy, ewma_cell_count);
   } SMARTLIST_FOREACH_END(chan);
 #endif /* HAVE_KIST_SUPPORT */
 

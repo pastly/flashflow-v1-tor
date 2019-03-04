@@ -21,6 +21,8 @@ void cmux_ewma_set_options(const or_options_t *options,
 
 void circuitmux_ewma_free_all(void);
 
+double ewma_get_cell_count(circuitmux_policy_data_t *policy_data);
+
 #ifdef CIRCUITMUX_EWMA_PRIVATE
 STATIC unsigned cell_ewma_get_current_tick_and_fraction(double *remainder_out);
 STATIC void cell_ewma_initialize_ticks(void);

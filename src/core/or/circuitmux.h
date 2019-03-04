@@ -116,6 +116,7 @@ void circuitmux_set_policy(circuitmux_t *cmux,
                            const circuitmux_policy_t *pol);
 
 /* Status inquiries */
+double circuitmux_if_ewma_get_cell_count(circuitmux_t *cmux);
 cell_direction_t circuitmux_attached_circuit_direction(
     circuitmux_t *cmux,
     circuit_t *circ);

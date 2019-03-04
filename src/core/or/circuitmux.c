@@ -78,6 +78,7 @@
 #include "core/or/cell_queue_st.h"
 #include "core/or/destroy_cell_queue_st.h"
 #include "core/or/or_circuit_st.h"
+#include "core/or/circuitmux_ewma.h"
 
 /*
  * Private typedefs for circuitmux.c
@@ -1376,3 +1377,7 @@ circuitmux_compare_muxes, (circuitmux_t *cmux_1, circuitmux_t *cmux_2))
   }
 }
 
+double circuitmux_if_ewma_get_cell_count(circuitmux_t *cmux)
+{
+  return ewma_get_cell_count(cmux->policy_data);
+}

@@ -504,6 +504,22 @@ ewma_pick_active_circuit(circuitmux_t *cmux,
  * be more preferred - see circuitmux_compare_muxes() of circuitmux.c.
  */
 
+double ewma_get_cell_count(circuitmux_policy_data_t *policy_data)
+{
+  if (!(policy_data->magic == EWMA_POL_DATA_MAGIC)) {
+    return -1;
+  }
+  ewma_policy_data_t *ewma_policy_data = TO_EWMA_POL_DATA(policy_data);
+  cell_ewma_t *ce = NULL;
+  if (smartlist_len(ewma_policy_data->active_circuit_pqueue) > 0) {
+    ce = smartlist_get(ewma_policy_data->active_circuit_pqueue, 0);
+  } else {
+    return -2;
+  }
+  tor_assert(ce);
+  return ce->cell_count;
+}
+
 static int
 ewma_cmp_cmux(circuitmux_t *cmux_1, circuitmux_policy_data_t *pol_data_1,
               circuitmux_t *cmux_2, circuitmux_policy_data_t *pol_data_2)
