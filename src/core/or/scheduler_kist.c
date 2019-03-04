@@ -711,9 +711,10 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
       /* Case 2: no more cells to send, but still open for writes */
 
       scheduler_set_channel_state(chan, SCHED_CHAN_WAITING_FOR_CELLS);
+      int sock = TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->s;
       log_info(
           LD_SCHED, "KIST stopped sending on %d because no_more_cells",
-          chan->global_identifier);
+          sock);
     } else if (!socket_can_write(&socket_table, chan)) {
 
       /* Case 3: cells to send, but cannot write */
@@ -729,9 +730,10 @@ kist_scheduler_run(int32_t scheduler_cell_write_limit)
         to_readd = smartlist_new();
       }
       smartlist_add(to_readd, chan);
+      int sock = TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->s;
       log_info(
           LD_SCHED, "KIST stopped sending on %d because cant_write_kernel",
-          chan->global_identifier);
+          sock);
     } else {
 
       /* Case 4: cells to send, and still open for writes */
