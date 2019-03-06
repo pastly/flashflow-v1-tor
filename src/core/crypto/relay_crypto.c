@@ -190,7 +190,7 @@ relay_encrypt_cell_outbound(cell_t *cell,
   relay_set_digest(layer_hint->crypto.f_digest, cell);
 
   circuit_t *c = TO_CIRCUIT(circ);
-  if (c->is_echo_circ && c->num_sent_echo_cells > 1) {
+  if (c->is_echo_circ && c->stop_encrypting_echo_cells) {
     // Only encrypt the first cell ...
     // The relay will decrypt the cell regardless. If we encrypt it, then it
     // will recognize it and proccess it (necessary for it to know this is an
@@ -198,6 +198,11 @@ relay_encrypt_cell_outbound(cell_t *cell,
     // as an echo circ and will automatically forward all cells back to us
     // without trying to recognize it
     return;
+  } else if (c->is_echo_circ) {
+    log_debug(
+        LD_OR, "Will encrypt this cell, but will not encrypt future "
+        "cells on this circuit");
+    c->stop_encrypting_echo_cells = 1;
   }
 
   thishop = layer_hint;
