@@ -256,6 +256,15 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     return 0;
   }
 
+  if (relay_decrypt_cell(circ, cell, cell_direction, &layer_hint, &recognized)
+      < 0) {
+    log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
+           "relay crypt failed. Dropping connection.");
+    return -END_CIRC_REASON_INTERNAL;
+  }
+
+  circuit_update_channel_usage(circ, cell);
+
   /* Echo circ on the relay side */
   if (circ->is_echo_circ && CIRCUIT_IS_ORCIRC(circ)) {
     //log_notice(LD_OR, "Got echo cell (2/2)");
@@ -274,15 +283,6 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     circ->num_sent_echo_cells += 1;
     return 0;
   }
-
-  if (relay_decrypt_cell(circ, cell, cell_direction, &layer_hint, &recognized)
-      < 0) {
-    log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
-           "relay crypt failed. Dropping connection.");
-    return -END_CIRC_REASON_INTERNAL;
-  }
-
-  circuit_update_channel_usage(circ, cell);
 
   if (recognized) {
     edge_connection_t *conn = NULL;
