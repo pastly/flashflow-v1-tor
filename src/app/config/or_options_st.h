@@ -1032,6 +1032,7 @@ struct or_options_t {
 
   int SplitScheduler;
   uint64_t SplitSchedulerPercentBackground;
+  uint64_t SchedulerEchoCellMustAccumulate;
   /** The list of scheduler type string ordered by priority that is first one
    * has to be tried first. Default: KIST,KISTLite,Vanilla */
   struct smartlist_t *Schedulers;

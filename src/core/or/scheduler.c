@@ -186,6 +186,7 @@ static int scheduler_currently_counting_cells = 0;
 static uint32_t scheduler_reporting_interval_ms = 0;
 static uint32_t scheduler_reporting_cell_count = 0;
 static monotime_t scheduler_last_report_time;
+static uint32_t scheduler_echo_cell_must_accumulate = 0;
 
 /*****************************************************************************
  * Scheduling system static function definitions
@@ -497,6 +498,11 @@ set_scheduler(void)
    * percent. Convert to a double. */
   scheduler_cell_write_limit_factor =
     (double)get_options()->SplitSchedulerPercentBackground / (double)100;
+
+  /* The number of echo cells that must accumulate in the cmux before we
+   * schedule a channel with an echo circuit */
+  scheduler_echo_cell_must_accumulate =
+    get_options()->SchedulerEchoCellMustAccumulate;
 }
 
 /*****************************************************************************
@@ -753,7 +759,7 @@ scheduler_channel_has_waiting_cells,(channel_t *chan))
   if (chan->scheduler_state == SCHED_CHAN_WAITING_FOR_CELLS) {
     /* If channel is special (measurement traffic), then don't add to
      * pending unless there's enough cells in the cmux */
-    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < 32) {
+    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < scheduler_echo_cell_must_accumulate) {
       return;
     }
     /*
@@ -916,7 +922,7 @@ scheduler_channel_wants_writes(channel_t *chan)
   if (chan->scheduler_state == SCHED_CHAN_WAITING_TO_WRITE) {
     /* If channel is special (measurement traffic), then don't add to
      * pending unless there's enough cells in the cmux */
-    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < 32) {
+    if (chan->has_echo_circ && circuitmux_num_cells(chan->cmux) < scheduler_echo_cell_must_accumulate) {
       return;
     }
     /*
