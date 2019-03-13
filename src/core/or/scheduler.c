@@ -280,17 +280,19 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     double ewma_cell_count = circuitmux_if_ewma_get_cell_count(chan->cmux);
     uint32_t sndqlen = 0;
     uint32_t notsent = 0;
+    uint32_t rcvqlen = 0;
     struct tcp_info tcp;
     socklen_t tcp_info_len = sizeof(tcp);
     tor_assert(getsockopt(sock, SOL_TCP, TCP_INFO, (void *)&(tcp), &tcp_info_len) >= 0);
     tor_assert(ioctl(sock, SIOCOUTQNSD, &notsent) >= 0);
     tor_assert(ioctl(sock, SIOCOUTQ, &sndqlen) >= 0);
+    tor_assert(ioctl(sock, SIOCINQ, &rcvqlen) >= 0);
     log_info(
         LD_SCHED, "%lu %s sock=%i cwnd=%u unacked=%u sndqlen=%u notsent=%u "
-        "outbuf=%u cmux=%u cmux_destroy=%u ewma_cell_count=%f",
+        "outbuf=%u cmux=%u cmux_destroy=%u ewma_cell_count=%f rcvqlen=%u",
         t, get_scheduler_type_string(sched->type),
         sock, tcp.tcpi_snd_cwnd, tcp.tcpi_unacked, sndqlen, notsent,
-        outbuf, cmux_regular, cmux_destroy, ewma_cell_count);
+        outbuf, cmux_regular, cmux_destroy, ewma_cell_count, rcvqlen);
   } SMARTLIST_FOREACH_END(chan);
 #endif /* HAVE_KIST_SUPPORT */
 
