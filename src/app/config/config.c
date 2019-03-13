@@ -607,7 +607,7 @@ static config_var_t option_vars_[] = {
   V(KISTSockBufSizeFactor,       DOUBLE,   "1.0"),
   V(SplitScheduler,              BOOL,     "0"),
   V(SplitSchedulerPercentBackground,UINT64,   "50"),
-  V(SchedulerEchoCellMustAccumulate,UINT64, "0"),
+  V(SchedulerEchoCellMustAccumulate,UINT64, "32"),
   V(Schedulers,                  CSV,      "KIST,KISTLite,Vanilla"),
   V(CircQueueHighWater,          UINT64,   "40000"),
   V(CircQueueLowWater,           UINT64,   "30000"),
