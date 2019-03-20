@@ -284,7 +284,7 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     uint32_t rcvqlen = 0;
     int sndbuflen = 0;
     int rcvbuflen = 0;
-    socklen_t optlen = sizeof(sndbufflen);
+    socklen_t optlen = sizeof(sndbuflen);
     struct tcp_info tcp;
     socklen_t tcp_info_len = sizeof(tcp);
     tor_assert(getsockopt(sock, SOL_TCP, TCP_INFO, (void *)&(tcp), &tcp_info_len) >= 0);
