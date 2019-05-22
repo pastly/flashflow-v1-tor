@@ -97,7 +97,6 @@ struct circuit_t {
   unsigned int stop_encrypting_echo_cells : 1;
   uint32_t echo_duration;
   time_t echo_stop_time;
-  time_t echo_last_report_time;
   uint32_t num_recv_echo_cells;
   uint32_t num_sent_echo_cells;
 

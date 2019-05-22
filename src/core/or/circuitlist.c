@@ -519,6 +519,7 @@ circuit_get_all_pending_on_channel(smartlist_t *out, channel_t *chan)
 {
   tor_assert(out);
   tor_assert(chan);
+  int already_added_an_echo_circ = 0;
 
   if (!circuits_pending_chans)
     return;
@@ -538,6 +539,12 @@ circuit_get_all_pending_on_channel(smartlist_t *out, channel_t *chan)
       if (tor_memneq(chan->identity_digest,
                      circ->n_hop->identity_digest, DIGEST_LEN))
         continue;
+    }
+    if (circ->is_echo_circ) {
+      if (already_added_an_echo_circ)
+        continue;
+      else
+        already_added_an_echo_circ = 1;
     }
     smartlist_add(out, circ);
   } SMARTLIST_FOREACH_END(circ);

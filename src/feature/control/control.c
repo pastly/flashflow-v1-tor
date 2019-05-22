@@ -135,7 +135,9 @@ get_speedtest_control_connection()
 {
   return speedtest_control_connection;
 }
-static circuit_t *speedtest_circuit = NULL;
+static smartlist_t *speedtest_circuits = NULL;
+time_t speedtest_last_report_time = 0;
+uint32_t speedtest_num_connected = 0;
 
 /** Yield true iff <b>s</b> is the state of a control_connection_t that has
  * finished authentication and is accepting commands. */
@@ -3738,7 +3740,7 @@ handle_control_extendcircuit(control_connection_t *conn, uint32_t len,
   /* now that we've populated the cpath, start extending */
   if (zero_circ) {
     int err_reason = 0;
-    if ((err_reason = circuit_handle_first_hop(circ)) < 0) {
+    if ((err_reason = circuit_handle_first_hop(circ, 0)) < 0) {
       circuit_mark_for_close(TO_CIRCUIT(circ), -err_reason);
       connection_write_str_to_buf("551 Couldn't start circuit\r\n", conn);
       goto done;
@@ -5397,22 +5399,32 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
 void
 control_speedtest_report_cell_counts()
 {
-  if (!speedtest_circuit)
+  if (!speedtest_circuits)
     return;
   if (!speedtest_control_connection)
     return;
   if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_TESTING)
     return;
-  uint32_t num_recv = speedtest_circuit->num_recv_echo_cells * 498;
-  uint32_t num_sent = speedtest_circuit->num_sent_echo_cells * 498;
+  time_t now = time(NULL);
+  if (now < speedtest_last_report_time + 1)
+    return;
+  speedtest_last_report_time = now;
+  uint32_t num_recv = 0;
+  uint32_t num_sent = 0;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    num_recv += c->num_recv_echo_cells * 514;
+    num_sent += c->num_sent_echo_cells * 514;
+    c->num_recv_echo_cells = 0;
+    c->num_sent_echo_cells = 0;
+  }
+  SMARTLIST_FOREACH_END(c);
   log_notice(
       LD_CONTROL, "Reporting %u/%u recv/sent measurement bytes",
       num_recv, num_sent);
   connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING %u %u\r\n",
       num_recv, num_sent);
-  speedtest_circuit->num_recv_echo_cells = 0;
-  speedtest_circuit->num_sent_echo_cells = 0;
 }
 
 const char *
@@ -5457,15 +5469,30 @@ control_stop_speedtest_circuit(circuit_t *circ)
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
     speedtest_control_connection = NULL;
   }
-  speedtest_circuit = NULL;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  }
+  SMARTLIST_FOREACH_END(c);
+  smartlist_free(speedtest_circuits);
 }
 
 void
 control_change_speedtest_state_to_connected(
     control_connection_t *c, circid_t circ_id)
 {
-  control_change_speedtest_state(c, CTRL_SPEEDTEST_STATE_CONNECTED);
-  connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", circ_id);
+  if (++speedtest_num_connected == smartlist_len(speedtest_circuits)) {
+    control_change_speedtest_state(c, CTRL_SPEEDTEST_STATE_CONNECTED);
+    connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", circ_id);
+    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+    {
+      log_notice(LD_OR, "Circuit %p is using conn %p sock=%d",
+          c->n_circ_id, TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn),
+          TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s);
+    }
+    SMARTLIST_FOREACH_END(c);
+  }
 }
 
 void
@@ -5492,10 +5519,10 @@ handle_control_testspeed_when_none(
 {
   tor_assert(!speedtest_control_connection);
   speedtest_control_connection = conn;
-  tor_assert(!speedtest_circuit);
+  tor_assert(!speedtest_circuits);
   tor_assert(conn->speedtest_state == CTRL_SPEEDTEST_STATE_NONE);
-  if (smartlist_len(args) != 1) {
-    return "Expected one argument (a relay fp)";
+  if (smartlist_len(args) != 2) {
+    return "Expected two arguments: a relay fp and num of circs";
   }
   const char *relay_fp = smartlist_get(args, 0);
   const node_t *node = node_get_by_nickname(relay_fp, 0);
@@ -5505,46 +5532,56 @@ handle_control_testspeed_when_none(
   }
 
   control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_CONNECTING);
-
-  // Make new circuit
-  origin_circuit_t *origin_circ = origin_circuit_init(CIRCUIT_PURPOSE_C_GENERAL, 0);
-  extend_info_t *info = extend_info_from_node(node, 1);
-  if (!info) {
-    log_warn(
-        LD_CONTROL, "Tried to connect to a node that lacks a suitable "
-        "descriptor, or which doesn't have any addresses that are allowed by "
-        "the firewall configuration. Marking circuit for closing.");
-    circuit_mark_for_close(TO_CIRCUIT(origin_circ), -END_CIRC_REASON_CONNECTFAILED);
-    return "Couldn't start circuit";
+  speedtest_circuits = smartlist_new();
+  speedtest_num_connected = 0;
+  const char *num_circs_str = smartlist_get(args, 1);
+  int ok = 0;
+  uint32_t num_circuits = (uint32_t)tor_parse_ulong(
+      num_circs_str, 10, 0, UINT32_MAX, &ok, NULL);
+  if (!ok) {
+    return "Unable to parse num circs as uint32";
   }
+  log_notice(LD_CONTROL, "Told to TESTSPEED for with %d circs", num_circuits);
+  while (num_circuits--) {
+    // Make new circuit
+    origin_circuit_t *origin_circ = origin_circuit_init(CIRCUIT_PURPOSE_C_GENERAL, 0);
+    extend_info_t *info = extend_info_from_node(node, 1);
+    if (!info) {
+      log_warn(
+          LD_CONTROL, "Tried to connect to a node that lacks a suitable "
+          "descriptor, or which doesn't have any addresses that are allowed by "
+          "the firewall configuration. Marking circuit for closing.");
+      circuit_mark_for_close(TO_CIRCUIT(origin_circ), -END_CIRC_REASON_CONNECTFAILED);
+      return "Couldn't start circuit";
+    }
 
-  circuit_append_new_exit(origin_circ, info);
-  extend_info_free(info);
-  origin_circ->build_state->onehop_tunnel = 0;
+    circuit_append_new_exit(origin_circ, info);
+    extend_info_free(info);
+    origin_circ->build_state->onehop_tunnel = 0;
 
-  // Start extending
-  int err_reason = 0;
-  if ((err_reason = circuit_handle_first_hop(origin_circ)) < 0) {
-    circuit_mark_for_close(TO_CIRCUIT(origin_circ), -err_reason);
-    log_warn(
-        LD_CONTROL, "Couldn't circuit_handle_first_hop. err_reason=%d",
-        err_reason);
-    return "Couldn't extend circuit";
+    // Start extending
+    int err_reason = 0;
+    if ((err_reason = circuit_handle_first_hop(origin_circ, 1)) < 0) {
+      circuit_mark_for_close(TO_CIRCUIT(origin_circ), -err_reason);
+      log_warn(
+          LD_CONTROL, "Couldn't circuit_handle_first_hop. err_reason=%d",
+          err_reason);
+      return "Couldn't extend circuit";
+    }
+
+    log_notice(LD_CONTROL, "Started a circuit build for TESTSPEED on circ %u",
+        origin_circ->global_identifier);
+
+    // Mark the circuit as a speedtest circuit
+    circuit_t *circ = TO_CIRCUIT(origin_circ);
+    circ->is_echo_circ = 1;
+    conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
+    conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
+    smartlist_add(speedtest_circuits, circ);
+
+    // Send events
+    control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
   }
-
-  log_notice(LD_CONTROL, "Started a circuit build for TESTSPEED on circ %u",
-      origin_circ->global_identifier);
-
-  // Mark the circuit as a speedtest circuit
-  circuit_t *circ = TO_CIRCUIT(origin_circ);
-  circ->is_echo_circ = 1;
-  conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
-  conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
-  tor_assert(!speedtest_circuit);
-  speedtest_circuit = circ;
-
-  // Send events
-  control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
   return NULL;
 }
 
@@ -5564,7 +5601,7 @@ handle_control_testspeed_when_connected(
 {
   (void)conn;
   (void)args;
-  tor_assert(speedtest_circuit);
+  tor_assert(speedtest_circuits);
   if (smartlist_len(args) != 1) {
     return "Expected one argument (an uint32 duration [secs])";
   }
@@ -5576,14 +5613,19 @@ handle_control_testspeed_when_connected(
     return "Unable to parse duration as uint32";
   }
   log_notice(LD_CONTROL, "Told to TESTSPEED for %u secs", duration);
-  speedtest_circuit->echo_duration = duration;
-  speedtest_circuit->echo_last_report_time = time(NULL);
-  speedtest_circuit->echo_stop_time = time(NULL) + (time_t)duration;
-  speedtest_circuit->num_sent_echo_cells = 0;
-  speedtest_circuit->num_recv_echo_cells = 0;
-  speedtest_circuit->echo_duration = duration;
   control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_TESTING);
-  circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(speedtest_circuit));
+  time_t now = time(NULL);
+  speedtest_last_report_time = now;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    c->echo_duration = duration;
+    c->echo_stop_time = now + (time_t)duration;
+    c->num_sent_echo_cells = 0;
+    c->num_recv_echo_cells = 0;
+    c->echo_duration = duration;
+    circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(c));
+  }
+  SMARTLIST_FOREACH_END(c);
   return NULL;
 }
 
@@ -5594,6 +5636,19 @@ handle_control_testspeed_when_testing(
   (void)conn;
   (void)args;
   return "Not implemented (when_testing)";
+}
+
+static void
+free_speedtest_circuits()
+{
+  if (!speedtest_circuits)
+    return;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  }
+  SMARTLIST_FOREACH_END(c);
 }
 
 static int
@@ -5627,7 +5682,7 @@ handle_control_testspeed(
   if (err_msg) {
     connection_printf_to_buf(conn, "552 %s\r\n", err_msg);
     speedtest_control_connection = NULL;
-    speedtest_circuit = NULL;
+    free_speedtest_circuits();
     control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_NONE);
   } else {
     //connection_printf_to_buf(conn, "250 SPEEDTESTING %u\r\n", 42069);

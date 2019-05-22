@@ -26,7 +26,7 @@ origin_circuit_t *circuit_establish_circuit(uint8_t purpose,
                                             int flags);
 struct circuit_guard_state_t *origin_circuit_get_guard_state(
                                             origin_circuit_t *circ);
-int circuit_handle_first_hop(origin_circuit_t *circ);
+int circuit_handle_first_hop(origin_circuit_t *circ, int force_new_conn);
 void circuit_n_chan_done(channel_t *chan, int status,
                          int close_origin_circuits);
 int inform_testing_reachability(void);

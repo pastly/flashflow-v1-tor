@@ -494,7 +494,7 @@ circuit_establish_circuit(uint8_t purpose, extend_info_t *exit_ei, int flags)
 
   control_event_circuit_status(circ, CIRC_EVENT_LAUNCHED, 0);
 
-  if ((err_reason = circuit_handle_first_hop(circ)) < 0) {
+  if ((err_reason = circuit_handle_first_hop(circ, 0)) < 0) {
     circuit_mark_for_close(TO_CIRCUIT(circ), -err_reason);
     return NULL;
   }
@@ -513,10 +513,10 @@ origin_circuit_get_guard_state(origin_circuit_t *circ)
  * it. If we're already connected, then send the 'create' cell.
  * Return 0 for ok, -reason if circ should be marked-for-close. */
 int
-circuit_handle_first_hop(origin_circuit_t *circ)
+circuit_handle_first_hop(origin_circuit_t *circ, int force_new_conn)
 {
   crypt_path_t *firsthop;
-  channel_t *n_chan;
+  channel_t *n_chan = NULL;
   int err_reason = 0;
   const char *msg = NULL;
   int should_launch = 0;
@@ -545,20 +545,22 @@ circuit_handle_first_hop(origin_circuit_t *circ)
             fmt_addrport(&firsthop->extend_info->addr,
                          firsthop->extend_info->port));
 
-  n_chan = channel_get_for_extend(firsthop->extend_info->identity_digest,
-                                  &firsthop->extend_info->ed_identity,
-                                  &firsthop->extend_info->addr,
-                                  &msg,
-                                  &should_launch);
+  if (!force_new_conn) {
+    n_chan = channel_get_for_extend(firsthop->extend_info->identity_digest,
+                                    &firsthop->extend_info->ed_identity,
+                                    &firsthop->extend_info->addr,
+                                    &msg,
+                                    &should_launch);
+  }
 
-  if (!n_chan) {
+  if (force_new_conn || !n_chan) {
     /* not currently connected in a useful way. */
     log_info(LD_CIRC, "Next router is %s: %s",
              safe_str_client(extend_info_describe(firsthop->extend_info)),
              msg?msg:"???");
     circ->base_.n_hop = extend_info_dup(firsthop->extend_info);
 
-    if (should_launch) {
+    if (force_new_conn || should_launch) {
       if (circ->build_state->onehop_tunnel)
         control_event_bootstrap(BOOTSTRAP_STATUS_CONN_DIR, 0);
       n_chan = channel_connect_for_circuit(
