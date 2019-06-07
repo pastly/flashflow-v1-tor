@@ -1671,7 +1671,7 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   //log_info(LD_CONTROL, "Sending speedtest cells ...");
   uint32_t after, before = circ->num_sent_echo_cells;
   int res;
-  while (!circ->streams_blocked_on_n_chan) {
+  while (!circ->streams_blocked_on_n_chan && time(NULL) < circ->echo_stop_time) {
     res = relay_send_command_from_edge(
         0, circ, RELAY_COMMAND_PING, NULL, 0, origin_circ->cpath);
     if (res < 0) {
