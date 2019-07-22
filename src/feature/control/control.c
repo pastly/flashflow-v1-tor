@@ -5469,13 +5469,15 @@ control_stop_speedtest_circuit(circuit_t *circ)
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
     speedtest_control_connection = NULL;
   }
-  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
-  {
-    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
-    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  if (speedtest_circuits) {
+    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+    {
+      circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+      SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+    }
+    SMARTLIST_FOREACH_END(c);
+    smartlist_free(speedtest_circuits);
   }
-  SMARTLIST_FOREACH_END(c);
-  smartlist_free(speedtest_circuits);
 }
 
 void
