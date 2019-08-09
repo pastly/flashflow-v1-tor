@@ -440,7 +440,9 @@ control_any_per_second_event_enabled(void)
       EVENT_MASK_(EVENT_CELL_STATS) |
       EVENT_MASK_(EVENT_CIRC_BANDWIDTH_USED) |
       EVENT_MASK_(EVENT_CONN_BW) |
-      EVENT_MASK_(EVENT_STREAM_BANDWIDTH_USED)
+      EVENT_MASK_(EVENT_STREAM_BANDWIDTH_USED) |
+      EVENT_MASK_(EVENT_SPEEDTESTING) |
+      EVENT_MASK_(EVENT_TESTSPEED)
   );
 }
 
@@ -488,6 +490,7 @@ control_per_second_events(void)
   control_event_conn_bandwidth_used();
   control_event_circ_bandwidth_used();
   control_event_circuit_cell_stats();
+  control_speedtest_report_cell_counts();
 }
 
 /** Append a NUL-terminated string <b>s</b> to the end of

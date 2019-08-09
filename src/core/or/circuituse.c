@@ -1685,7 +1685,7 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   }
   after = circ->num_sent_echo_cells;
   log_info(LD_CONTROL, "Sent %u echo cells", after - before);
-  control_speedtest_report_cell_counts();
+  //control_speedtest_report_cell_counts();
   time_t now = time(NULL);
   if (now >= circ->echo_stop_time) {
     log_notice(LD_CONTROL, "It's time to stop the speedtest (circuituse.c)");
