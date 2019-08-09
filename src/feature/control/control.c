@@ -435,14 +435,13 @@ control_event_is_interesting(int event)
 int
 control_any_per_second_event_enabled(void)
 {
+  return 1;
   return ANY_EVENT_IS_INTERESTING(
       EVENT_MASK_(EVENT_BANDWIDTH_USED) |
       EVENT_MASK_(EVENT_CELL_STATS) |
       EVENT_MASK_(EVENT_CIRC_BANDWIDTH_USED) |
       EVENT_MASK_(EVENT_CONN_BW) |
-      EVENT_MASK_(EVENT_STREAM_BANDWIDTH_USED) |
-      EVENT_MASK_(EVENT_SPEEDTESTING) |
-      EVENT_MASK_(EVENT_TESTSPEED)
+      EVENT_MASK_(EVENT_STREAM_BANDWIDTH_USED)
   );
 }
 
