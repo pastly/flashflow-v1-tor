@@ -5467,6 +5467,8 @@ control_stop_speedtest_circuit(circuit_t *circ)
   if (speedtest_control_connection) {
     control_change_speedtest_state(
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+    connection_printf_to_buf(
+        speedtest_control_connection, "650 SPEEDTESTING END\r\n");
     speedtest_control_connection = NULL;
   }
   if (speedtest_circuits) {
@@ -5509,7 +5511,7 @@ control_change_speedtest_state(control_connection_t *c, int new)
   c->speedtest_state = new;
   if (old_state != new_state) {
     if (c->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
-      connection_printf_to_buf(c, "250 SPEEDTESTING %u %u\r\n", 0, 0);
+      connection_printf_to_buf(c, "250 SPEEDTESTING BEGIN\r\n");
     }
   }
   return;
