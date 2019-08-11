@@ -94,6 +94,7 @@ struct circuit_t {
   unsigned int received_destroy : 1;
 
   unsigned int is_echo_circ : 1;
+  unsigned int is_echo_circ_bg : 1;
   unsigned int stop_encrypting_echo_cells : 1;
   uint32_t echo_duration;
   time_t echo_stop_time;

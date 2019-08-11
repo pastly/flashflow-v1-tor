@@ -12,6 +12,9 @@
 #ifndef TOR_CIRCUITUSE_H
 #define TOR_CIRCUITUSE_H
 
+void circuit_send_speedtest_cells(origin_circuit_t *origin_circ);
+void circuit_tell_report_bg_traffic(origin_circuit_t *origin_circ, int start);
+
 void circuit_expire_building(void);
 void circuit_expire_waiting_for_better_guard(void);
 void circuit_remove_handled_ports(smartlist_t *needed_ports);

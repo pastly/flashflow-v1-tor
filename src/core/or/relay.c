@@ -249,8 +249,25 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
   if (circ->marked_for_close)
     return 0;
 
-  /* Echo circ on the client side */
-  if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
+  if (circ->is_echo_circ_bg) {
+    /* Echo circ on the client side */
+    tor_assert(circ->is_echo_circ);
+    if (circ->num_recv_echo_cells || circ->num_sent_echo_cells) {
+      log_warn(
+          LD_OR, "About to overwrite existing num_recv=%u num_sent=%u "
+          "echo cells",
+          circ->num_recv_echo_cells,
+          circ->num_sent_echo_cells);
+    }
+#define RH_LEN 11
+    uint32_t num_cells = tor_ntohl(get_uint32(cell->payload+RH_LEN));
+#undef RH_LEN
+    circ->num_recv_echo_cells = circ->num_sent_echo_cells = num_cells;
+    control_speedtest_report_cell_counts();
+    //log_notice(LD_OR, "Got echo cell, we are bg (1/2)");
+    return 0;
+  } else if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
+    /* Still echo circ on the client side */
     //log_notice(LD_OR, "Got echo cell (1/2)");
     circ->num_recv_echo_cells++;
     return 0;
@@ -285,6 +302,7 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
   }
 
   if (recognized) {
+    //log_notice(LD_OR, "recieved recognized cell");
     edge_connection_t *conn = NULL;
 
     if (circ->purpose == CIRCUIT_PURPOSE_PATH_BIAS_TESTING) {
@@ -1487,7 +1505,7 @@ report_cell_count(uint32_t cell_count)
   rh.command = RELAY_COMMAND_SPEEDTEST_STARTSTOP;
   rh.length = 8;
   relay_header_pack(&c.payload, &rh);
-  set_uint32(c.payload+RH_LEN, tor_htonl(cell_count * 498));
+  set_uint32(c.payload+RH_LEN, tor_htonl(cell_count));
   set_uint32(c.payload+RH_LEN+4, 0);
   append_cell_to_circuit_queue(circ, chan, &c, CELL_DIRECTION_IN, 0);
 }
@@ -1525,7 +1543,7 @@ handle_relay_speedtest_startstop_cell(
     saved_coord_circ = circ;
   } else {
     cell_count = scheduler_get_cell_counter_and_stop_counting();
-    set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count * 514));
+    set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count));
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
     saved_coord_circ = NULL;
   }
@@ -1606,6 +1624,8 @@ connection_edge_process_relay_cell(cell_t *cell, circuit_t *circ,
                &rh, cell, circ, conn, layer_hint);
     }
   }
+
+  //log_notice(domain, "foo stream_id=%d command=%d", rh.stream_id, rh.command);
 
   switch (rh.command) {
     case RELAY_COMMAND_DROP:

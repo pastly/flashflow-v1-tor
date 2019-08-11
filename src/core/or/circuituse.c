@@ -1693,6 +1693,26 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   }
 }
 
+void
+circuit_tell_report_bg_traffic(origin_circuit_t *origin_circ, int start)
+{
+  tor_assert(origin_circ);
+  circuit_t *circ = TO_CIRCUIT(origin_circ);
+  int res;
+  char buf[8];
+  set_uint32(buf, tor_htonl(!!start));
+  set_uint32(buf+4, tor_htonl(1000));
+  res = relay_send_command_from_edge(
+      0, circ, RELAY_COMMAND_SPEEDTEST_STARTSTOP,
+      buf, 8, origin_circ->cpath);
+  if (res < 0) {
+    log_warn(LD_CIRC,
+        "relay_send_command_from_edge for bg traffic failed for "
+        "speedtest circ");
+    return;
+  }
+}
+
 /** The circuit <b>circ</b> has just become open. Take the next
  * step: for rendezvous circuits, we pass circ to the appropriate
  * function in rendclient or rendservice. For general circuits, we

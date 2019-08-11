@@ -199,7 +199,7 @@ relay_encrypt_cell_outbound(cell_t *cell,
     // without trying to recognize it
     return;
   } else if (c->is_echo_circ) {
-    log_debug(
+    log_notice(
         LD_OR, "Will encrypt this cell, but will not encrypt future "
         "cells on this circuit");
     c->stop_encrypting_echo_cells = 1;

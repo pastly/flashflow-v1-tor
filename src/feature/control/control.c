@@ -136,8 +136,10 @@ get_speedtest_control_connection()
   return speedtest_control_connection;
 }
 static smartlist_t *speedtest_circuits = NULL;
-time_t speedtest_last_report_time = 0;
-uint32_t speedtest_num_connected = 0;
+static time_t speedtest_last_report_time = 0;
+static uint32_t speedtest_num_connected = 0;
+static int speedtest_bg_reporter = 0;
+static int pausing_while_stop_cell_sends = 0;
 
 /** Yield true iff <b>s</b> is the state of a control_connection_t that has
  * finished authentication and is accepting commands. */
@@ -5416,20 +5418,21 @@ control_speedtest_report_cell_counts()
   uint32_t num_sent = 0;
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
   {
-    num_recv += c->num_recv_echo_cells * 514;
-    num_sent += c->num_sent_echo_cells * 514;
-    c->num_recv_echo_cells = 0;
-    c->num_sent_echo_cells = 0;
     if (first_echo_stop_time == 0) {
       first_echo_stop_time = c->echo_stop_time;
     } else if (c->echo_stop_time < first_echo_stop_time) {
       first_echo_stop_time = c->echo_stop_time;
     }
+    num_recv += c->num_recv_echo_cells * 514;
+    num_sent += c->num_sent_echo_cells * 514;
+    c->num_recv_echo_cells = 0;
+    c->num_sent_echo_cells = 0;
   }
   SMARTLIST_FOREACH_END(c);
   log_notice(
-      LD_CONTROL, "Reporting %u/%u recv/sent measurement bytes",
-      num_recv, num_sent);
+      LD_CONTROL, "Reporting %u/%u recv/sent %s bytes",
+      num_recv, num_sent,
+      speedtest_bg_reporter ? "background" : "measurement");
   connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING %u %u\r\n",
       num_recv, num_sent);
@@ -5439,7 +5442,8 @@ control_speedtest_report_cell_counts()
       control_stop_speedtest_circuit(c);
     }
     SMARTLIST_FOREACH_END(c);
-    smartlist_free(speedtest_circuits);
+    if (!pausing_while_stop_cell_sends)
+      smartlist_free(speedtest_circuits);
   }
 }
 
@@ -5466,6 +5470,13 @@ control_stop_speedtest_circuit(circuit_t *circ)
     log_warn(LD_CONTROL, "Stopping a speedtest circ before the scheduled stop time");
   }
   origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
+  if (speedtest_bg_reporter && !pausing_while_stop_cell_sends) {
+    circ->stop_encrypting_echo_cells = 0;
+    circuit_tell_report_bg_traffic(origin_circ, 0);
+    pausing_while_stop_cell_sends = 1;
+    return;
+  }
+  pausing_while_stop_cell_sends = 0;
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
   channel_mark_for_close(circ->n_chan);
   if (speedtest_control_connection) {
@@ -5512,6 +5523,19 @@ control_change_speedtest_state(control_connection_t *c, int new)
   return;
 }
 
+static int
+is_bg_reporter_command(smartlist_t *args) {
+  if (smartlist_len(args) != 3)
+    return 0;
+  const char *num_circs_str = smartlist_get(args, 1);
+  const char *bg_str = smartlist_get(args, 2);
+  if (strncmp(num_circs_str, "1", 1))
+    return 0;
+  if (strncmp(bg_str, "BG", 2))
+    return 0;
+  return 1;
+}
+
 static const char *
 handle_control_testspeed_when_none(
     control_connection_t *conn, smartlist_t *args)
@@ -5520,8 +5544,10 @@ handle_control_testspeed_when_none(
   speedtest_control_connection = conn;
   tor_assert(!speedtest_circuits);
   tor_assert(conn->speedtest_state == CTRL_SPEEDTEST_STATE_NONE);
-  if (smartlist_len(args) != 2) {
-    return "Expected two arguments: a relay fp and num of circs";
+  speedtest_bg_reporter = is_bg_reporter_command(args);
+  if (smartlist_len(args) != 2 && !speedtest_bg_reporter) {
+    return "Expected either 2 args (relay fp and num of circs) or "
+      "3 args (relay fp, \"1\", and \"BG\")";
   }
   const char *relay_fp = smartlist_get(args, 0);
   const node_t *node = node_get_by_nickname(relay_fp, 0);
@@ -5540,7 +5566,10 @@ handle_control_testspeed_when_none(
   if (!ok) {
     return "Unable to parse num circs as uint32";
   }
-  log_notice(LD_CONTROL, "Told to TESTSPEED for with %d circs", num_circuits);
+  log_notice(
+      LD_CONTROL, "Told to TESTSPEED with %d circs. We are%s a "
+      "bg traffic reporter.", num_circuits, speedtest_bg_reporter ? "" : " not");
+  tor_assert(!speedtest_bg_reporter || (speedtest_bg_reporter && num_circuits == 1));
   while (num_circuits--) {
     // Make new circuit
     origin_circuit_t *origin_circ = origin_circuit_init(CIRCUIT_PURPOSE_C_GENERAL, 0);
@@ -5574,6 +5603,7 @@ handle_control_testspeed_when_none(
     // Mark the circuit as a speedtest circuit
     circuit_t *circ = TO_CIRCUIT(origin_circ);
     circ->is_echo_circ = 1;
+    circ->is_echo_circ_bg = speedtest_bg_reporter;
     conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
     conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
     smartlist_add(speedtest_circuits, circ);
@@ -5622,7 +5652,11 @@ handle_control_testspeed_when_connected(
     c->num_sent_echo_cells = 0;
     c->num_recv_echo_cells = 0;
     c->echo_duration = duration;
-    circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(c));
+    if (!speedtest_bg_reporter)
+      circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(c));
+    else {
+      circuit_tell_report_bg_traffic(TO_ORIGIN_CIRCUIT(c), 1);
+    }
   }
   SMARTLIST_FOREACH_END(c);
   return NULL;
@@ -5656,7 +5690,7 @@ handle_control_testspeed(
   smartlist_t *args;
   const char *err_msg = NULL;
   (void)len; // body is null-terminated, so ignore len
-  args = getargs_helper("TESTSPEED", conn, body, 1, 2);
+  args = getargs_helper("TESTSPEED", conn, body, 1, 3);
   if (!args) {
     log_warn(LD_CONTROL, "Could not parse TESTSPEED arguments");
     return 0;
