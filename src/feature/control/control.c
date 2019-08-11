@@ -5411,6 +5411,7 @@ control_speedtest_report_cell_counts()
   if (now < speedtest_last_report_time + 1)
     return;
   speedtest_last_report_time = now;
+  time_t first_echo_stop_time = 0;
   uint32_t num_recv = 0;
   uint32_t num_sent = 0;
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
@@ -5419,6 +5420,11 @@ control_speedtest_report_cell_counts()
     num_sent += c->num_sent_echo_cells * 514;
     c->num_recv_echo_cells = 0;
     c->num_sent_echo_cells = 0;
+    if (first_echo_stop_time == 0) {
+      first_echo_stop_time = c->echo_stop_time;
+    } else if (c->echo_stop_time < first_echo_stop_time) {
+      first_echo_stop_time = c->echo_stop_time;
+    }
   }
   SMARTLIST_FOREACH_END(c);
   log_notice(
@@ -5427,6 +5433,14 @@ control_speedtest_report_cell_counts()
   connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING %u %u\r\n",
       num_recv, num_sent);
+  if (now >= first_echo_stop_time) {
+    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+    {
+      control_stop_speedtest_circuit(c);
+    }
+    SMARTLIST_FOREACH_END(c);
+    smartlist_free(speedtest_circuits);
+  }
 }
 
 const char *
@@ -5452,35 +5466,14 @@ control_stop_speedtest_circuit(circuit_t *circ)
     log_warn(LD_CONTROL, "Stopping a speedtest circ before the scheduled stop time");
   }
   origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
-  //control_event_speedtest_complete(origin_circ);
-  log_notice(
-      LD_OR, "Completed speedtest on circ %"PRIu32". Received %lu "
-      "cells, sent %lu cells in %"PRIu32" seconds with %s",
-      origin_circ->global_identifier,
-      circ->num_recv_echo_cells,
-      circ->num_sent_echo_cells,
-      circ->echo_duration,
-      !origin_circ->cpath ?
-        "<null>" :
-        extend_info_describe(origin_circ->cpath->extend_info));
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
-  connection_mark_for_close(TO_CONN(BASE_CHAN_TO_TLS(circ->n_chan)->conn));
-  //channel_mark_for_close(circ->n_chan);
+  channel_mark_for_close(circ->n_chan);
   if (speedtest_control_connection) {
     control_change_speedtest_state(
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
     connection_printf_to_buf(
         speedtest_control_connection, "650 SPEEDTESTING END\r\n");
     speedtest_control_connection = NULL;
-  }
-  if (speedtest_circuits) {
-    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
-    {
-      circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
-      SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
-    }
-    SMARTLIST_FOREACH_END(c);
-    smartlist_free(speedtest_circuits);
   }
 }
 
