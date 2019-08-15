@@ -4518,11 +4518,11 @@ options_validate(or_options_t *old_options, or_options_t *options,
              "high.");
   }
 
-  if (options->TestingEnableConnBwEvent &&
-      !options->TestingTorNetwork && !options->UsingTestNetworkDefaults_) {
-    REJECT("TestingEnableConnBwEvent may only be changed in testing "
-           "Tor networks!");
-  }
+  //if (options->TestingEnableConnBwEvent &&
+  //    !options->TestingTorNetwork && !options->UsingTestNetworkDefaults_) {
+  //  REJECT("TestingEnableConnBwEvent may only be changed in testing "
+  //         "Tor networks!");
+  //}
 
   if (options->TestingEnableCellStatsEvent &&
       !options->TestingTorNetwork && !options->UsingTestNetworkDefaults_) {
