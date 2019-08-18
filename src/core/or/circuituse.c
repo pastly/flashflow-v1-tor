@@ -1698,6 +1698,13 @@ circuit_tell_report_bg_traffic(origin_circuit_t *origin_circ, int start)
 {
   tor_assert(origin_circ);
   circuit_t *circ = TO_CIRCUIT(origin_circ);
+  if (!circ->n_chan) {
+    log_warn(
+        LD_CONTROL, "Would tell target relay to %s reporting bg traffic, "
+        "but no channel to send cell on. "
+        "Returning early.", start ? "start" : "stop");
+    return;
+  }
   int res;
   char buf[8];
   set_uint32(buf, tor_htonl(!!start));

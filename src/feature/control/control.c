@@ -5330,6 +5330,19 @@ connection_control_closed(control_connection_t *conn)
     } SMARTLIST_FOREACH_END(cp);
   }
 
+  if (conn == speedtest_control_connection) {
+    log_notice(LD_CONTROL, "Speedtest connection going away. "
+        "Cleaning up circuits");
+    if (speedtest_circuits) {
+      SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
+        control_stop_speedtest_circuit(c);
+      }
+      SMARTLIST_FOREACH_END(c);
+      smartlist_free(speedtest_circuits);
+    }
+    speedtest_control_connection = NULL;
+  }
+
   if (conn->is_owning_control_connection) {
     lost_owning_controller("connection", "closed");
   }
@@ -5469,6 +5482,15 @@ control_stop_speedtest_circuit(circuit_t *circ)
   if (time(NULL) < circ->echo_stop_time) {
     log_warn(LD_CONTROL, "Stopping a speedtest circ before the scheduled stop time");
   }
+  if (!CIRCUIT_IS_ORIGIN(circ)) {
+    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
+        "origin circ (1)");
+    return;
+  } else if (circ->magic != ORIGIN_CIRCUIT_MAGIC) {
+    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
+        "origin circ (2)");
+    return;
+  }
   origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
   if (speedtest_bg_reporter && !pausing_while_stop_cell_sends) {
     circ->stop_encrypting_echo_cells = 0;
@@ -5478,7 +5500,8 @@ control_stop_speedtest_circuit(circuit_t *circ)
   }
   pausing_while_stop_cell_sends = 0;
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
-  channel_mark_for_close(circ->n_chan);
+  if (circ->n_chan)
+    channel_mark_for_close(circ->n_chan);
   if (speedtest_control_connection) {
     control_change_speedtest_state(
         speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
@@ -5492,6 +5515,12 @@ void
 control_change_speedtest_state_to_connected(
     control_connection_t *c, circid_t circ_id)
 {
+  if (!speedtest_circuits) {
+    log_warn(LD_CONTROL, "Told a speedtest circuit has connected, but no "
+        "list of speedtest circuits. Did an experiment fail to start "
+        "recently?");
+    return;
+  }
   if (++speedtest_num_connected == smartlist_len(speedtest_circuits)) {
     control_change_speedtest_state(c, CTRL_SPEEDTEST_STATE_CONNECTED);
     connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", circ_id);
