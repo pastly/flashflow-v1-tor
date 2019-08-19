@@ -5447,8 +5447,8 @@ control_speedtest_report_cell_counts()
       num_recv, num_sent,
       speedtest_bg_reporter ? "background" : "measurement");
   connection_printf_to_buf(
-      speedtest_control_connection, "650 SPEEDTESTING %u %u\r\n",
-      num_recv, num_sent);
+      speedtest_control_connection, "650 SPEEDTESTING %ld %u %u\r\n",
+      now, num_recv, num_sent);
   if (now >= first_echo_stop_time) {
     SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
     {
