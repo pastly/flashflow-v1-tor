@@ -5571,6 +5571,17 @@ handle_control_testspeed_when_none(
 {
   tor_assert(!speedtest_control_connection);
   speedtest_control_connection = conn;
+  // 2 hacks if we just got told to do another measurement while we're still
+  // cleaning up after the previous one
+  if (pausing_while_stop_cell_sends) {
+    pausing_while_stop_cell_sends = 0;
+  }
+  if (speedtest_circuits) {
+    log_warn(LD_CONTROL, "Told to start a new speedtest while we still have "
+        "a speedtest_circuits list. Probably going to leak some memory.");
+    smartlist_free(speedtest_circuits);
+    speedtest_circuits = NULL;
+  }
   tor_assert(!speedtest_circuits);
   tor_assert(conn->speedtest_state == CTRL_SPEEDTEST_STATE_NONE);
   speedtest_bg_reporter = is_bg_reporter_command(args);
