@@ -5654,6 +5654,56 @@ handle_control_testspeed_when_none(
   return NULL;
 }
 
+void
+control_speedtest_circ_cleanup(circuit_t *circ)
+{
+  if (!speedtest_circuits)
+    return;
+  if (!speedtest_control_connection)
+    return;
+  if (!circ->is_echo_circ)
+    return;
+  if (!smartlist_contains(speedtest_circuits, circ)) {
+    log_warn(LD_CONTROL, "circ is echo circ but not in list");
+  }
+  const char *state_str = control_speedtest_state_to_string(
+    speedtest_control_connection->speedtest_state);
+  switch (speedtest_control_connection->speedtest_state) {
+    case CTRL_SPEEDTEST_STATE_NONE:
+      log_notice(
+        LD_CONTROL,
+        "circ cleanup in speedtest state %s. Nothing to do", state_str);
+      return;
+    case CTRL_SPEEDTEST_STATE_CONNECTING:
+      connection_printf_to_buf(
+        speedtest_control_connection,
+        "551 SPEEDTESTING closing speedtest circ while in CONNECTING\r\n");
+      break;
+    case CTRL_SPEEDTEST_STATE_CONNECTED:
+      connection_printf_to_buf(
+        speedtest_control_connection,
+        "551 SPEEDTESTING closing speedtest circ while in CONNECTED\r\n");
+      break;
+    case CTRL_SPEEDTEST_STATE_TESTING:
+      connection_printf_to_buf(
+          speedtest_control_connection, "650 SPEEDTESTING END\r\n");
+      break;
+    default: tor_assert_unreached(); break;
+  };
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
+    /*
+     * don't mark circuits for close as we could create an infinite loop
+     * since circuit_mark_for_close calls us. Alas, this leaves the
+     * circuits open until Tor gets around to doing something about them.
+     */
+    //circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  } SMARTLIST_FOREACH_END(c);
+  smartlist_free(speedtest_circuits);
+  speedtest_control_connection = NULL;
+  return;
+}
+
 static const char *
 handle_control_testspeed_when_connecting(
     control_connection_t *conn, smartlist_t *args)

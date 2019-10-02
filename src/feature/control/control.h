@@ -16,6 +16,7 @@
 #define CTRL_SPEEDTEST_STATE_CONNECTING 1
 #define CTRL_SPEEDTEST_STATE_CONNECTED 2
 #define CTRL_SPEEDTEST_STATE_TESTING 3
+void control_speedtest_circ_cleanup(circuit_t *);
 void control_speedtest_report_cell_counts(void);
 const char *control_speedtest_state_to_string(int);
 void control_change_speedtest_state_to_connected(control_connection_t *, circid_t);
