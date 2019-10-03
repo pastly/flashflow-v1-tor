@@ -5701,6 +5701,7 @@ control_speedtest_circ_cleanup(circuit_t *circ)
   } SMARTLIST_FOREACH_END(c);
   smartlist_free(speedtest_circuits);
   speedtest_control_connection = NULL;
+  speedtest_num_connected = 0;
   return;
 }
 
