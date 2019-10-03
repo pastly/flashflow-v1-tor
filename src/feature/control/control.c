@@ -5333,14 +5333,23 @@ connection_control_closed(control_connection_t *conn)
   if (conn == speedtest_control_connection) {
     log_notice(LD_CONTROL, "Speedtest connection going away. "
         "Cleaning up circuits");
-    if (speedtest_circuits) {
-      SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
-        control_stop_speedtest_circuit(c);
-      }
-      SMARTLIST_FOREACH_END(c);
-      smartlist_free(speedtest_circuits);
+    /*
+     * need to cleanup. calling this function will mark circuits for close, and
+     * the mark circuits for close function will ultimately delete our
+     * speedtest_circuits list in control_speedtest_circ_cleanup. Thus we need
+     * to make a copy of the list of our circuits so we can iterate over them.
+     */
+    smartlist_t *circ_list = smartlist_new();
+    smartlist_add_all(circ_list, speedtest_circuits);
+    tor_assert(smartlist_len(circ_list) == smartlist_len(speedtest_circuits));
+    SMARTLIST_FOREACH_BEGIN(circ_list, circuit_t *, c)
+    {
+      control_stop_speedtest_circuit(c);
     }
-    speedtest_control_connection = NULL;
+    SMARTLIST_FOREACH_END(c);
+    smartlist_free(circ_list);
+    tor_assert(!speedtest_circuits);
+    tor_assert(!speedtest_control_connection);
   }
 
   if (conn->is_owning_control_connection) {
@@ -5465,8 +5474,8 @@ control_speedtest_report_cell_counts()
     }
     SMARTLIST_FOREACH_END(c);
     smartlist_free(circ_list);
-    if (!pausing_while_stop_cell_sends)
-      smartlist_free(speedtest_circuits);
+    tor_assert(!speedtest_circuits);
+    tor_assert(!speedtest_control_connection);
   }
 }
 
