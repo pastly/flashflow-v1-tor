@@ -5450,11 +5450,21 @@ control_speedtest_report_cell_counts()
       speedtest_control_connection, "650 SPEEDTESTING %ld %u %u\r\n",
       now, num_recv, num_sent);
   if (now >= first_echo_stop_time) {
-    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+    /*
+     * need to cleanup. calling this function will mark circuits for close, and
+     * the mark circuits for close function will ultimately delete our
+     * speedtest_circuits list in control_speedtest_circ_cleanup. Thus we need
+     * to make a copy of the list of our circuits so we can iterate over them.
+     */
+    smartlist_t *circ_list = smartlist_new();
+    smartlist_add_all(circ_list, speedtest_circuits);
+    tor_assert(smartlist_len(circ_list) == smartlist_len(speedtest_circuits));
+    SMARTLIST_FOREACH_BEGIN(circ_list, circuit_t *, c)
     {
       control_stop_speedtest_circuit(c);
     }
     SMARTLIST_FOREACH_END(c);
+    smartlist_free(circ_list);
     if (!pausing_while_stop_cell_sends)
       smartlist_free(speedtest_circuits);
   }
