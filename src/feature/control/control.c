@@ -5348,8 +5348,15 @@ connection_control_closed(control_connection_t *conn)
     }
     SMARTLIST_FOREACH_END(c);
     smartlist_free(circ_list);
-    tor_assert(!speedtest_circuits);
-    tor_assert(!speedtest_control_connection);
+    if (!speedtest_bg_reporter) {
+      /* if not the bg traffic reporting client, we expect these structs to be
+       * gone as of the call to control_stop_speedtest_circuit().
+       * If we are the bg reporter, then we ultimately kept them around and do
+       * not expect them gone yet.
+       */
+      tor_assert(!speedtest_circuits);
+      tor_assert(!speedtest_control_connection);
+    }
   }
 
   if (conn->is_owning_control_connection) {
@@ -5474,8 +5481,15 @@ control_speedtest_report_cell_counts()
     }
     SMARTLIST_FOREACH_END(c);
     smartlist_free(circ_list);
-    tor_assert(!speedtest_circuits);
-    tor_assert(!speedtest_control_connection);
+    if (!speedtest_bg_reporter) {
+      /* if not the bg traffic reporting client, we expect these structs to be
+       * gone as of the call to control_stop_speedtest_circuit().
+       * If we are the bg reporter, then we ultimately kept them around and do
+       * not expect them gone yet.
+       */
+      tor_assert(!speedtest_circuits);
+      tor_assert(!speedtest_control_connection);
+    }
   }
 }
 
