@@ -5694,6 +5694,21 @@ control_speedtest_circ_cleanup(circuit_t *circ)
     return;
   if (!speedtest_control_connection)
     return;
+  if (speedtest_control_connection->base_.type != CONN_TYPE_CONTROL) {
+    log_warn(
+      LD_CONTROL,
+      "Have a speedtest control conn pointer but its type is %u not %u. "
+      "Assuming this is garbage memory, that we are not in a speedtest, "
+      "and that we should free all the things",
+      speedtest_control_connection->base_.type, CONN_TYPE_CONTROL);
+    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
+      SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+    } SMARTLIST_FOREACH_END(c);
+    smartlist_free(speedtest_circuits);
+    speedtest_control_connection = NULL;
+    speedtest_num_connected = 0;
+    return;
+  }
   if (!circ->is_echo_circ)
     return;
   if (!smartlist_contains(speedtest_circuits, circ)) {
