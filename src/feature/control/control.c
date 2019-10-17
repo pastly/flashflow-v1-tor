@@ -5602,10 +5602,14 @@ static const char *
 handle_control_testspeed_when_none(
     control_connection_t *conn, smartlist_t *args)
 {
-  tor_assert(!speedtest_control_connection);
-  speedtest_control_connection = conn;
-  // 2 hacks if we just got told to do another measurement while we're still
+  // 3 hacks if we just got told to do another measurement while we're still
   // cleaning up after the previous one
+  if (speedtest_control_connection) {
+    log_warn(
+        LD_CONTROL, "Told to start another measurement while we still have "
+        "a speedtest_control_connection. Going to replace it.");
+  }
+  speedtest_control_connection = conn;
   if (pausing_while_stop_cell_sends) {
     pausing_while_stop_cell_sends = 0;
   }
