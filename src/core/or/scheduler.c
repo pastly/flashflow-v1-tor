@@ -231,6 +231,7 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
       LD_SCHED, "%s sched event callback called",
       get_scheduler_type_string(sched->type));
 
+#if 0
   if (!get_options()->SplitScheduler) {
     // If not using two schedulers, no write limits ever
     cell_limit_this_time = INT_MAX;
@@ -262,6 +263,9 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
       scheduler_cell_write_limit_factor * (double)scheduler_cell_write_limit /
       (1.0 - scheduler_cell_write_limit_factor));
   }
+#else
+  cell_limit_this_time = INT_MAX;
+#endif
 
 #ifdef HAVE_KIST_SUPPORT
 
