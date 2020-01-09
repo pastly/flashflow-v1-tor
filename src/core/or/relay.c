@@ -1504,7 +1504,7 @@ report_cell_count(uint32_t cell_count)
   c.command = CELL_RELAY;
   rh.command = RELAY_COMMAND_SPEEDTEST_STARTSTOP;
   rh.length = 8;
-  relay_header_pack(&c.payload, &rh);
+  relay_header_pack(c.payload, &rh);
   set_uint32(c.payload+RH_LEN, tor_htonl(cell_count));
   set_uint32(c.payload+RH_LEN+4, 0);
   append_cell_to_circuit_queue(circ, chan, &c, CELL_DIRECTION_IN, 0);
