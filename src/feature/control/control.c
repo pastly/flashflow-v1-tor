@@ -5546,7 +5546,7 @@ control_stop_speedtest_circuit(circuit_t *circ)
 
 void
 control_change_speedtest_state_to_connected(
-    control_connection_t *c, circid_t circ_id)
+    control_connection_t *ctrl_conn, circid_t circ_id)
 {
   if (!speedtest_circuits) {
     log_warn(LD_CONTROL, "Told a speedtest circuit has connected, but no "
@@ -5555,8 +5555,8 @@ control_change_speedtest_state_to_connected(
     return;
   }
   if (++speedtest_num_connected == smartlist_len(speedtest_circuits)) {
-    control_change_speedtest_state(c, CTRL_SPEEDTEST_STATE_CONNECTED);
-    connection_printf_to_buf(c, "250 SPEEDTESTING %u\r\n", circ_id);
+    control_change_speedtest_state(ctrl_conn, CTRL_SPEEDTEST_STATE_CONNECTED);
+    connection_printf_to_buf(ctrl_conn, "250 SPEEDTESTING %u\r\n", circ_id);
     SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
     {
       log_notice(LD_OR, "Circuit %p is using conn %p sock=%d",
