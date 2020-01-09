@@ -1524,6 +1524,7 @@ static void
 handle_relay_speedtest_startstop_cell(
     cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
+  (void)conn; // so it is "used"
   uint32_t cell_count = 0;
   relay_speedtest_startstop_cell_t ss;
   or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
