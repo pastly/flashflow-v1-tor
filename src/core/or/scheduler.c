@@ -454,14 +454,6 @@ static void
 set_scheduler(void)
 {
   const scheduler_t *old_scheduler = the_scheduler;
-  scheduler_types_t old_scheduler_type = SCHEDULER_NONE;
-
-  /* We keep track of the type in order to log only if the type switched. We
-   * can't just use the scheduler pointers because KIST and KISTLite share the
-   * same object. */
-  if (the_scheduler) {
-    old_scheduler_type = the_scheduler->type;
-  }
 
   /* From the options, select the scheduler type to set. */
   select_scheduler();
