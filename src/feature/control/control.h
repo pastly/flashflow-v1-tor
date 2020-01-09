@@ -261,6 +261,8 @@ void control_event_hs_descriptor_content(const char *onion_address,
                                          const char *content);
 void control_free_all(void);
 
+void control_stop_speedtest_circuit(circuit_t *circ);
+
 #ifdef CONTROL_PRIVATE
 #include "lib/crypt_ops/crypto_ed25519.h"
 
@@ -330,8 +332,6 @@ void control_free_all(void);
 
 #define EVENT_MASK_ALL_              (EVENT_MASK_ABOVE_MIN_ \
                                       & EVENT_MASK_BELOW_MAX_)
-
-void control_stop_speedtest_circuit(circuit_t *circ);
 
 /* Used only by control.c and test.c */
 STATIC size_t write_escaped_data(const char *data, size_t len, char **out);
