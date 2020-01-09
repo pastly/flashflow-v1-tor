@@ -131,7 +131,7 @@
 
 static control_connection_t *speedtest_control_connection = NULL;
 control_connection_t *
-get_speedtest_control_connection()
+get_speedtest_control_connection(void)
 {
   return speedtest_control_connection;
 }
@@ -5430,7 +5430,7 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</html>\n";
 
 void
-control_speedtest_report_cell_counts()
+control_speedtest_report_cell_counts(void)
 {
   if (!speedtest_circuits)
     return;
