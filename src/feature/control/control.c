@@ -137,7 +137,7 @@ get_speedtest_control_connection(void)
 }
 static smartlist_t *speedtest_circuits = NULL;
 static time_t speedtest_last_report_time = 0;
-static uint32_t speedtest_num_connected = 0;
+static int speedtest_num_connected = 0;
 static int speedtest_bg_reporter = 0;
 static int pausing_while_stop_cell_sends = 0;
 
