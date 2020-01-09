@@ -132,6 +132,10 @@ void scheduler_channel_wants_writes(channel_t *chan);
 MOCK_DECL(void, scheduler_channel_doesnt_want_writes, (channel_t *chan));
 MOCK_DECL(void, scheduler_channel_has_waiting_cells, (channel_t *chan));
 
+void scheduler_reset_cell_counter_and_start_counting(
+    uint32_t report_interval_ms);
+uint32_t scheduler_get_cell_counter_and_stop_counting(void);
+
 /*****************************************************************************
  * Private scheduler functions
  *
@@ -203,9 +207,6 @@ void scheduler_kist_set_full_mode(void);
 void scheduler_kist_set_lite_mode(void);
 scheduler_t *get_kist_scheduler(void);
 int kist_scheduler_run_interval(void);
-void scheduler_reset_cell_counter_and_start_counting(
-    uint32_t report_interval_ms);
-uint32_t scheduler_get_cell_counter_and_stop_counting(void);
 
 #ifdef TOR_UNIT_TESTS
 extern int32_t sched_run_interval;
