@@ -176,7 +176,7 @@ void scheduler_touch_channel(channel_t *chan);
  * Defined in scheduler_kist.c
  *********************************/
 
-size_t channel_outbuf_length(channel_t *chan);
+size_t channel_outbuf_length(const channel_t *chan);
 #ifdef SCHEDULER_KIST_PRIVATE
 
 /* Socket table entry which holds information of a channel's socket and kernel

@@ -117,16 +117,22 @@ static scheduler_t kist_scheduler;
 
 /* Little helper function to get the length of a channel's output buffer */
 size_t
-channel_outbuf_length(channel_t *chan)
+channel_outbuf_length(const channel_t *chan)
 {
   tor_assert(chan);
+  /* cast to remove const qualifier because BASE_CHAN_TO_TLS() is ultimately
+   * channel_tls_from_base() which doesn't take a const channel_t * but just a
+   * channel_t *. As of 2020-01-09, the chan isn't changed in these functions
+   * so this is totally fine.
+   */
+  channel_t *c = (channel_t *)chan;
   /* In theory, this can not happen because we can not scheduler a channel
    * without a connection that has its outbuf initialized. Just in case, bug
    * on this so we can understand a bit more why it happened. */
-  if (SCHED_BUG(BASE_CHAN_TO_TLS(chan)->conn == NULL, chan)) {
+  if (SCHED_BUG(BASE_CHAN_TO_TLS(c)->conn == NULL, c)) {
     return 0;
   }
-  return buf_datalen(TO_CONN(BASE_CHAN_TO_TLS(chan)->conn)->outbuf);
+  return buf_datalen(TO_CONN(BASE_CHAN_TO_TLS(c)->conn)->outbuf);
 }
 
 /* Little helper function for HT_FOREACH_FN. */
