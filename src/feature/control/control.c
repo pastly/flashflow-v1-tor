@@ -5559,7 +5559,7 @@ control_change_speedtest_state_to_connected(
     connection_printf_to_buf(ctrl_conn, "250 SPEEDTESTING %u\r\n", circ_id);
     SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
     {
-      log_notice(LD_OR, "Circuit %p is using conn %p sock=%d",
+      log_notice(LD_OR, "Circuit %u is using conn %p sock=%d",
           c->n_circ_id, TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn),
           TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s);
     }
@@ -5706,6 +5706,7 @@ control_speedtest_circ_cleanup(circuit_t *circ)
       "and that we should free all the things",
       speedtest_control_connection->base_.type, CONN_TYPE_CONTROL);
     SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
+      (void)c; // "use" c
       SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
     } SMARTLIST_FOREACH_END(c);
     smartlist_free(speedtest_circuits);
@@ -5748,6 +5749,7 @@ control_speedtest_circ_cleanup(circuit_t *circ)
      * since circuit_mark_for_close calls us. Alas, this leaves the
      * circuits open until Tor gets around to doing something about them.
      */
+    (void)c; // "use" c
     //circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
     SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
   } SMARTLIST_FOREACH_END(c);
@@ -5815,7 +5817,7 @@ handle_control_testspeed_when_testing(
 }
 
 static void
-free_speedtest_circuits()
+free_speedtest_circuits(void)
 {
   if (!speedtest_circuits)
     return;
