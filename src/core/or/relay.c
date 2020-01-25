@@ -142,6 +142,8 @@ uint64_t stats_n_circ_max_cell_reached = 0;
 
 static circuit_t *saved_coord_circ = NULL;
 
+static uint64_t speedtest_original_bandwidth_burst = 0;
+
 /** Used to tell which stream to read from first on a circuit. */
 static tor_weak_rng_t stream_choice_rng = TOR_WEAK_RNG_INIT;
 
@@ -1535,8 +1537,25 @@ handle_relay_speedtest_startstop_cell(
     log_notice(
         LD_EDGE, "Got speedtest start command telling us to report every "
         "%ums", ss.report_interval_ms);
+    uint64_t bw_rate, bw_burst;
+    bw_rate = get_options()->BandwidthRate;
+    bw_burst = get_options()->BandwidthBurst;
+    log_notice(
+        LD_EDGE, "Capping BandwidthBurst %llu to BandwidthRate %llu",
+        bw_burst, bw_rate);
+    speedtest_original_bandwidth_burst = bw_burst;
+    get_options_mutable()->BandwidthBurst = bw_rate;
+    connection_bucket_adjust(get_options());
   } else {
     log_notice(LD_EDGE, "Got speedtest stop command");
+    uint64_t bw_rate, bw_burst;
+    bw_rate = get_options()->BandwidthRate;
+    bw_burst = get_options()->BandwidthBurst;
+    log_notice(
+        LD_EDGE, "Setting BandwidthBurst %llu to it's original value %llu",
+        bw_burst, speedtest_original_bandwidth_burst);
+    get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
+    connection_bucket_adjust(get_options());
   }
 
   if (ss.is_start) {
