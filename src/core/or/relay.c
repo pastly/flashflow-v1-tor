@@ -1541,18 +1541,17 @@ handle_relay_speedtest_startstop_cell(
     bw_rate = get_options()->BandwidthRate;
     bw_burst = get_options()->BandwidthBurst;
     log_notice(
-        LD_EDGE, "Capping BandwidthBurst %llu to BandwidthRate %llu",
+        LD_EDGE, "Capping BandwidthBurst %" PRIu64 " to BandwidthRate %" PRIu64,
         bw_burst, bw_rate);
     speedtest_original_bandwidth_burst = bw_burst;
     get_options_mutable()->BandwidthBurst = bw_rate;
     connection_bucket_adjust(get_options());
   } else {
     log_notice(LD_EDGE, "Got speedtest stop command");
-    uint64_t bw_rate, bw_burst;
-    bw_rate = get_options()->BandwidthRate;
+    uint64_t bw_burst;
     bw_burst = get_options()->BandwidthBurst;
     log_notice(
-        LD_EDGE, "Setting BandwidthBurst %llu to it's original value %llu",
+        LD_EDGE, "Setting BandwidthBurst %" PRIu64 " to it's original value %" PRIu64,
         bw_burst, speedtest_original_bandwidth_burst);
     get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
     connection_bucket_adjust(get_options());
