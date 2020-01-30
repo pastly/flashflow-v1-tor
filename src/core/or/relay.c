@@ -1555,6 +1555,16 @@ handle_relay_speedtest_startstop_cell(
         bw_burst, speedtest_original_bandwidth_burst);
     get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
     connection_bucket_adjust(get_options());
+    int num_chans_closed = 0;
+    const smartlist_t *all_channels = get_all_channels();
+    SMARTLIST_FOREACH_BEGIN(all_channels, channel_t *, chan_i) {
+        if (chan_i->has_echo_circ) {
+            // mark for close
+            channel_mark_for_close(chan_i);
+            num_chans_closed++;
+        }
+    } SMARTLIST_FOREACH_END(chan_i);
+    log_notice(LD_EDGE, "Marked %d echo chans for close", num_chans_closed);
   }
 
   if (ss.is_start) {

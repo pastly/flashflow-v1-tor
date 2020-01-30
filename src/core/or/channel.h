@@ -514,6 +514,8 @@ struct channel_listener_s {
   uint64_t n_accepted;
 };
 
+const smartlist_t *get_all_channels(void);
+
 /* Channel state manipulations */
 
 int channel_state_is_valid(channel_state_t state);

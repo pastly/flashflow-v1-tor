@@ -88,6 +88,9 @@
 
 /* All channel_t instances */
 static smartlist_t *all_channels = NULL;
+const smartlist_t *get_all_channels(void) {
+    return (const smartlist_t *)all_channels;
+}
 
 /* All channel_t instances not in ERROR or CLOSED states */
 static smartlist_t *active_channels = NULL;
