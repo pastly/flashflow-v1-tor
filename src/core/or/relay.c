@@ -1548,13 +1548,16 @@ handle_relay_speedtest_startstop_cell(
     connection_bucket_adjust(get_options());
   } else {
     log_notice(LD_EDGE, "Got speedtest stop command");
-    uint64_t bw_burst;
-    bw_burst = get_options()->BandwidthBurst;
-    log_notice(
-        LD_EDGE, "Setting BandwidthBurst %" PRIu64 " to it's original value %" PRIu64,
-        bw_burst, speedtest_original_bandwidth_burst);
-    get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
-    connection_bucket_adjust(get_options());
+    if (speedtest_original_bandwidth_burst) {
+      uint64_t bw_burst;
+      bw_burst = get_options()->BandwidthBurst;
+      log_notice(
+          LD_EDGE, "Setting BandwidthBurst %" PRIu64 " to it's original value %" PRIu64,
+          bw_burst, speedtest_original_bandwidth_burst);
+      get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
+      connection_bucket_adjust(get_options());
+      speedtest_original_bandwidth_burst = 0;
+    }
     int num_chans_closed = 0;
     const smartlist_t *all_channels = get_all_channels();
     SMARTLIST_FOREACH_BEGIN(all_channels, channel_t *, chan_i) {
