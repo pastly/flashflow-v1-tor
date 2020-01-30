@@ -67,6 +67,7 @@
 #include "core/or/connection_edge.h"
 #include "core/or/connection_or.h"
 #include "core/or/dos.h"
+#include "core/or/relay.h"
 #include "core/or/status.h"
 #include "feature/client/addressmap.h"
 #include "feature/client/bridges.h"
@@ -2637,6 +2638,7 @@ second_elapsed_callback(periodic_timer_t *timer, void *arg)
 
   /* Maybe some controller events are ready to fire */
   control_per_second_events();
+  relay_per_second_events();
 
   run_scheduled_events(now);
 }

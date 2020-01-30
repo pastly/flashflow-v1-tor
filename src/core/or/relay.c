@@ -141,7 +141,8 @@ uint64_t stats_n_relay_cells_delivered = 0;
 uint64_t stats_n_circ_max_cell_reached = 0;
 
 static circuit_t *saved_coord_circ = NULL;
-
+#define SPEEDTEST_FAILSAFE_DURATION 35
+static time_t speedtest_failsafe_stop_time = 0;
 static uint64_t speedtest_original_bandwidth_burst = 0;
 
 /** Used to tell which stream to read from first on a circuit. */
@@ -1523,6 +1524,47 @@ parse_inbound_relay_speedtest_startstop(
 }
 
 static void
+backup_and_limit_bw_burst(void) {
+  uint64_t bw_rate, bw_burst;
+  bw_rate = get_options()->BandwidthRate;
+  bw_burst = get_options()->BandwidthBurst;
+  log_notice(
+      LD_EDGE, "Capping BandwidthBurst %" PRIu64 " to BandwidthRate %" PRIu64,
+      bw_burst, bw_rate);
+  speedtest_original_bandwidth_burst = bw_burst;
+  get_options_mutable()->BandwidthBurst = bw_rate;
+  connection_bucket_adjust(get_options());
+}
+
+void
+reset_bw_burst(void) {
+  if (speedtest_original_bandwidth_burst) {
+    uint64_t bw_burst;
+    bw_burst = get_options()->BandwidthBurst;
+    log_notice(
+        LD_EDGE, "Setting BandwidthBurst %" PRIu64 " to it's original value %" PRIu64,
+        bw_burst, speedtest_original_bandwidth_burst);
+    get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
+    connection_bucket_adjust(get_options());
+    speedtest_original_bandwidth_burst = 0;
+  }
+}
+
+void
+close_echo_channels(void) {
+  int num_chans_closed = 0;
+  const smartlist_t *all_channels = get_all_channels();
+  SMARTLIST_FOREACH_BEGIN(all_channels, channel_t *, chan_i) {
+      if (chan_i->has_echo_circ) {
+          // mark for close
+          channel_mark_for_close(chan_i);
+          num_chans_closed++;
+      }
+  } SMARTLIST_FOREACH_END(chan_i);
+  log_notice(LD_EDGE, "Marked %d echo chans for close", num_chans_closed);
+}
+
+static void
 handle_relay_speedtest_startstop_cell(
     cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
@@ -1534,40 +1576,16 @@ handle_relay_speedtest_startstop_cell(
 
   parse_inbound_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
   if (ss.is_start) {
+    time_t now = time(NULL);
+    speedtest_failsafe_stop_time = now + SPEEDTEST_FAILSAFE_DURATION;
     log_notice(
         LD_EDGE, "Got speedtest start command telling us to report every "
-        "%ums", ss.report_interval_ms);
-    uint64_t bw_rate, bw_burst;
-    bw_rate = get_options()->BandwidthRate;
-    bw_burst = get_options()->BandwidthBurst;
-    log_notice(
-        LD_EDGE, "Capping BandwidthBurst %" PRIu64 " to BandwidthRate %" PRIu64,
-        bw_burst, bw_rate);
-    speedtest_original_bandwidth_burst = bw_burst;
-    get_options_mutable()->BandwidthBurst = bw_rate;
-    connection_bucket_adjust(get_options());
+        "%ums.", ss.report_interval_ms);
+    backup_and_limit_bw_burst();
   } else {
     log_notice(LD_EDGE, "Got speedtest stop command");
-    if (speedtest_original_bandwidth_burst) {
-      uint64_t bw_burst;
-      bw_burst = get_options()->BandwidthBurst;
-      log_notice(
-          LD_EDGE, "Setting BandwidthBurst %" PRIu64 " to it's original value %" PRIu64,
-          bw_burst, speedtest_original_bandwidth_burst);
-      get_options_mutable()->BandwidthBurst = speedtest_original_bandwidth_burst;
-      connection_bucket_adjust(get_options());
-      speedtest_original_bandwidth_burst = 0;
-    }
-    int num_chans_closed = 0;
-    const smartlist_t *all_channels = get_all_channels();
-    SMARTLIST_FOREACH_BEGIN(all_channels, channel_t *, chan_i) {
-        if (chan_i->has_echo_circ) {
-            // mark for close
-            channel_mark_for_close(chan_i);
-            num_chans_closed++;
-        }
-    } SMARTLIST_FOREACH_END(chan_i);
-    log_notice(LD_EDGE, "Marked %d echo chans for close", num_chans_closed);
+    reset_bw_burst();
+    close_echo_channels();
   }
 
   if (ss.is_start) {
@@ -1582,6 +1600,19 @@ handle_relay_speedtest_startstop_cell(
 }
 
 #undef RH_LEN
+
+void
+relay_per_second_events(void) {
+  time_t now = time(NULL);
+  if (speedtest_failsafe_stop_time && now > speedtest_failsafe_stop_time) {
+    log_notice(LD_EDGE, "Speedtest has gone on too long. Failing safe.");
+    scheduler_get_cell_counter_and_stop_counting();
+    reset_bw_burst();
+    close_echo_channels();
+    saved_coord_circ = NULL;
+    speedtest_failsafe_stop_time = 0;
+  }
+}
 
 /** An incoming relay cell has arrived on circuit <b>circ</b>. If
  * <b>conn</b> is NULL this is a control cell, else <b>cell</b> is

@@ -53,6 +53,10 @@ size_t packed_cell_mem_cost(void);
 
 int have_been_under_memory_pressure(void);
 
+void reset_bw_burst(void);
+void close_echo_channels(void);
+void relay_per_second_events(void);
+
 /* For channeltls.c */
 void packed_cell_free_(packed_cell_t *cell);
 #define packed_cell_free(cell) \
