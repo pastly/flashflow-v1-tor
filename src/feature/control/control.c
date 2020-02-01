@@ -476,6 +476,19 @@ control_get_bytes_rw_last_sec(uint64_t *n_read,
 }
 
 static void
+free_speedtest_circuits(void)
+{
+  if (!speedtest_circuits)
+    return;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  }
+  SMARTLIST_FOREACH_END(c);
+}
+
+static void
 control_speedtest_force_connected(void) {
   if (!speedtest_circuits)
     return;
@@ -485,9 +498,19 @@ control_speedtest_force_connected(void) {
     return;
   if (!speedtest_failsafe_circ_build_stop_time)
     return;
-  if (time(NULL) > speedtest_failsafe_circ_build_stop_time && speedtest_num_connected)
+  time_t now = time(NULL);
+  // too much time has passed and we have at least 1 speedtest circuit
+  if (now > speedtest_failsafe_circ_build_stop_time && speedtest_num_connected)
       control_change_speedtest_state_to_connected(
               speedtest_control_connection, 0, 1);
+  // too much time has passed and have 0 speedtest circuits
+  else if (now > speedtest_failsafe_circ_build_stop_time) {
+    connection_printf_to_buf(speedtest_control_connection, "552 No speedtest circuits connected\r\n");
+    control_change_speedtest_state(speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+    free_speedtest_circuits();
+    speedtest_control_connection = NULL;
+    speedtest_failsafe_circ_build_stop_time = 0;
+  }
 }
 
 /**
@@ -5592,13 +5615,13 @@ control_change_speedtest_state_to_connected(
     return 0;
   }
   if (speedtest_control_connection->speedtest_state == CTRL_SPEEDTEST_STATE_CONNECTED) {
-    speedtest_num_connected++;
+    ++speedtest_num_connected;
     log_warn(LD_CONTROL, "Already consider ourselves as connected, but told "
       "circ %d has connected. Now at %d.",
       circ_id, speedtest_num_connected);
     return 0;
   } else if (speedtest_control_connection->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
-    speedtest_num_connected++;
+    ++speedtest_num_connected;
     log_warn(LD_CONTROL, "Already consider ourselves as testing, but told "
       "circ %d has connected. Now at %d.",
       circ_id, speedtest_num_connected);
@@ -5885,19 +5908,6 @@ handle_control_testspeed_when_testing(
   (void)conn;
   (void)args;
   return "Not implemented (when_testing)";
-}
-
-static void
-free_speedtest_circuits(void)
-{
-  if (!speedtest_circuits)
-    return;
-  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
-  {
-    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
-    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
-  }
-  SMARTLIST_FOREACH_END(c);
 }
 
 static int
