@@ -141,8 +141,8 @@ uint64_t stats_n_relay_cells_delivered = 0;
 uint64_t stats_n_circ_max_cell_reached = 0;
 
 static circuit_t *saved_coord_circ = NULL;
-#define SPEEDTEST_FAILSAFE_DURATION 35
-static time_t speedtest_failsafe_stop_time = 0;
+#define SPEEDTEST_FAILSAFE_MEAUSRE_DURATION 35
+static time_t speedtest_failsafe_measure_stop_time = 0;
 static uint64_t speedtest_original_bandwidth_burst = 0;
 
 /** Used to tell which stream to read from first on a circuit. */
@@ -1577,7 +1577,7 @@ handle_relay_speedtest_startstop_cell(
   parse_inbound_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
   if (ss.is_start) {
     time_t now = time(NULL);
-    speedtest_failsafe_stop_time = now + SPEEDTEST_FAILSAFE_DURATION;
+    speedtest_failsafe_measure_stop_time = now + SPEEDTEST_FAILSAFE_MEAUSRE_DURATION;
     log_notice(
         LD_EDGE, "Got speedtest start command telling us to report every "
         "%ums.", ss.report_interval_ms);
@@ -1604,13 +1604,13 @@ handle_relay_speedtest_startstop_cell(
 void
 relay_per_second_events(void) {
   time_t now = time(NULL);
-  if (speedtest_failsafe_stop_time && now > speedtest_failsafe_stop_time) {
+  if (speedtest_failsafe_measure_stop_time && now > speedtest_failsafe_measure_stop_time) {
     log_notice(LD_EDGE, "Speedtest has gone on too long. Failing safe.");
     scheduler_get_cell_counter_and_stop_counting();
     reset_bw_burst();
     close_echo_channels();
     saved_coord_circ = NULL;
-    speedtest_failsafe_stop_time = 0;
+    speedtest_failsafe_measure_stop_time = 0;
   }
 }
 
