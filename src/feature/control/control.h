@@ -19,7 +19,7 @@
 void control_speedtest_circ_cleanup(circuit_t *);
 void control_speedtest_report_cell_counts(void);
 const char *control_speedtest_state_to_string(int);
-void control_change_speedtest_state_to_connected(control_connection_t *, circid_t);
+int control_change_speedtest_state_to_connected(control_connection_t *, circid_t, int);
 void control_change_speedtest_state(control_connection_t *, int);
 control_connection_t * get_speedtest_control_connection(void);
 

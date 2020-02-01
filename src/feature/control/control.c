@@ -140,6 +140,8 @@ static time_t speedtest_last_report_time = 0;
 static int speedtest_num_connected = 0;
 static int speedtest_bg_reporter = 0;
 static int pausing_while_stop_cell_sends = 0;
+#define SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION 5
+static time_t speedtest_failsafe_circ_build_stop_time = 0;
 
 /** Yield true iff <b>s</b> is the state of a control_connection_t that has
  * finished authentication and is accepting commands. */
@@ -473,6 +475,21 @@ control_get_bytes_rw_last_sec(uint64_t *n_read,
   stats_prev_n_written = stats_n_bytes_written;
 }
 
+static void
+control_speedtest_force_connected(void) {
+  if (!speedtest_circuits)
+    return;
+  if (!speedtest_control_connection)
+    return;
+  if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_CONNECTING)
+    return;
+  if (!speedtest_failsafe_circ_build_stop_time)
+    return;
+  if (time(NULL) > speedtest_failsafe_circ_build_stop_time && speedtest_num_connected)
+      control_change_speedtest_state_to_connected(
+              speedtest_control_connection, 0, 1);
+}
+
 /**
  * Run all the controller events (if any) that are scheduled to trigger once
  * per second.
@@ -492,6 +509,7 @@ control_per_second_events(void)
   control_event_circ_bandwidth_used();
   control_event_circuit_cell_stats();
   control_speedtest_report_cell_counts();
+  control_speedtest_force_connected();
 }
 
 /** Append a NUL-terminated string <b>s</b> to the end of
@@ -5544,27 +5562,72 @@ control_stop_speedtest_circuit(circuit_t *circ)
   }
 }
 
-void
+/*
+ * Called to tell the control system that a speedtest circuit has opened and it
+ * might want to consider itself entirely connected to the relay (i.e. it might
+ * be time to go from CONNECTING to CONNECTED).
+ *
+ * The caller can optionally tell us to force considering ourselves CONNECTED
+ * (e.g. because the failsafe timer ran out).
+ *
+ * The return value is 0 if the caller should NOT immediately start sending
+ * echo cells on the circuit. This is the usual case. Other code will take care
+ * of starting the traffic generation. The return value is 1 if the caller
+ * SHOULD immediately start sending echo cells on the circuit. This will be the
+ * case when we are already in the testing phase.
+ */
+int
 control_change_speedtest_state_to_connected(
-    control_connection_t *ctrl_conn, circid_t circ_id)
+    control_connection_t *ctrl_conn, circid_t circ_id, int force)
 {
   if (!speedtest_circuits) {
     log_warn(LD_CONTROL, "Told a speedtest circuit has connected, but no "
         "list of speedtest circuits. Did an experiment fail to start "
         "recently?");
-    return;
+    return 0;
   }
-  if (++speedtest_num_connected == smartlist_len(speedtest_circuits)) {
+  if (!speedtest_control_connection) {
+    log_warn(LD_CONTROL, "Told a speedtest circuit has connected, but no "
+        "speedtest control connection.");
+    return 0;
+  }
+  if (speedtest_control_connection->speedtest_state == CTRL_SPEEDTEST_STATE_CONNECTED) {
+    speedtest_num_connected++;
+    log_warn(LD_CONTROL, "Already consider ourselves as connected, but told "
+      "circ %d has connected. Now at %d.",
+      circ_id, speedtest_num_connected);
+    return 0;
+  } else if (speedtest_control_connection->speedtest_state == CTRL_SPEEDTEST_STATE_TESTING) {
+    speedtest_num_connected++;
+    log_warn(LD_CONTROL, "Already consider ourselves as testing, but told "
+      "circ %d has connected. Now at %d.",
+      circ_id, speedtest_num_connected);
+    return 1;
+  } else if (force || ++speedtest_num_connected == smartlist_len(speedtest_circuits)) {
+    if (force) {
+      log_warn(
+        LD_OR, "Forcing transition to connected. Have %d circs connected",
+        speedtest_num_connected);
+    }
+    speedtest_failsafe_circ_build_stop_time = 0;
     control_change_speedtest_state(ctrl_conn, CTRL_SPEEDTEST_STATE_CONNECTED);
     connection_printf_to_buf(ctrl_conn, "250 SPEEDTESTING %u\r\n", circ_id);
     SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
     {
-      log_notice(LD_OR, "Circuit %u is using conn %p sock=%d",
+      if (!CIRCUIT_IS_ORIGIN(c)) {
+        log_warn(
+          LD_OR,
+          "Circ %u in speedtest circ list, but is not origin circ. Ignoring",
+          c->n_circ_id);
+      }
+      log_notice(LD_OR, "Circuit %u is using conn %p sock=%d open=%d",
           c->n_circ_id, TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn),
-          TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s);
+          TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s,
+          TO_ORIGIN_CIRCUIT(c)->has_opened);
     }
     SMARTLIST_FOREACH_END(c);
   }
+  return 0;
 }
 
 void
@@ -5688,6 +5751,7 @@ handle_control_testspeed_when_none(
     // Send events
     control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
   }
+  speedtest_failsafe_circ_build_stop_time = time(NULL) + SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION;
   return NULL;
 }
 
@@ -5756,6 +5820,7 @@ control_speedtest_circ_cleanup(circuit_t *circ)
   smartlist_free(speedtest_circuits);
   speedtest_control_connection = NULL;
   speedtest_num_connected = 0;
+  speedtest_failsafe_circ_build_stop_time = 0;
   return;
 }
 
@@ -5797,10 +5862,16 @@ handle_control_testspeed_when_connected(
     c->num_sent_echo_cells = 0;
     c->num_recv_echo_cells = 0;
     c->echo_duration = duration;
-    if (!speedtest_bg_reporter)
-      circuit_send_speedtest_cells(TO_ORIGIN_CIRCUIT(c));
-    else {
-      circuit_tell_report_bg_traffic(TO_ORIGIN_CIRCUIT(c), 1);
+    origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
+    if (oc->has_opened) {
+      if (!speedtest_bg_reporter)
+        circuit_send_speedtest_cells(oc);
+      else
+        circuit_tell_report_bg_traffic(oc, 1);
+    } else {
+      log_warn(
+        LD_CONTROL, "Circ %d not open, so not telling it to send cells "
+        "or report bg traffic.", c->n_circ_id);
     }
   }
   SMARTLIST_FOREACH_END(c);
