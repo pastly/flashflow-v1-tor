@@ -486,6 +486,7 @@ free_speedtest_circuits(void)
     SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
   }
   SMARTLIST_FOREACH_END(c);
+  smartlist_free(speedtest_circuits);
 }
 
 static void
