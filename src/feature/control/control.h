@@ -16,12 +16,13 @@
 #define CTRL_SPEEDTEST_STATE_CONNECTING 1
 #define CTRL_SPEEDTEST_STATE_CONNECTED 2
 #define CTRL_SPEEDTEST_STATE_TESTING 3
-void control_speedtest_circ_cleanup(circuit_t *);
 void control_speedtest_report_cell_counts(void);
 const char *control_speedtest_state_to_string(int);
 int control_change_speedtest_state_to_connected(control_connection_t *, circid_t, int);
 void control_change_speedtest_state(control_connection_t *, int);
 control_connection_t * get_speedtest_control_connection(void);
+void control_speedtest_complete_stop(void);
+int control_speedtest_stop_circuit(circuit_t *circ);
 
 
 /** Used to indicate the type of a circuit event passed to the controller.
@@ -261,7 +262,6 @@ void control_event_hs_descriptor_content(const char *onion_address,
                                          const char *content);
 void control_free_all(void);
 
-void control_stop_speedtest_circuit(circuit_t *circ);
 
 #ifdef CONTROL_PRIVATE
 #include "lib/crypt_ops/crypto_ed25519.h"

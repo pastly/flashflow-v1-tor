@@ -2204,7 +2204,8 @@ circuit_mark_for_close_, (circuit_t *circ, int reason, int line,
   /* Notify the HS subsystem that this circuit is closing. */
   hs_circ_cleanup(circ);
   /* Notify speedtest system */
-  control_speedtest_circ_cleanup(circ);
+  if (circ->is_echo_circ)
+    control_speedtest_stop_circuit(circ);
 
   if (circuits_pending_close == NULL)
     circuits_pending_close = smartlist_new();
@@ -2212,7 +2213,7 @@ circuit_mark_for_close_, (circuit_t *circ, int reason, int line,
   smartlist_add(circuits_pending_close, circ);
   mainloop_schedule_postloop_cleanup();
 
-  log_info(LD_GENERAL, "Circuit %u (id: %" PRIu32 ") marked for close at "
+  log_notice(LD_GENERAL, "Circuit %u (id: %" PRIu32 ") marked for close at "
                        "%s:%d (orig reason: %d, new reason: %d)",
            circ->n_circ_id,
            CIRCUIT_IS_ORIGIN(circ) ?

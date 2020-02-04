@@ -139,7 +139,6 @@ static smartlist_t *speedtest_circuits = NULL;
 static time_t speedtest_last_report_time = 0;
 static int speedtest_num_connected = 0;
 static int speedtest_bg_reporter = 0;
-static int pausing_while_stop_cell_sends = 0;
 #define SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION 5
 static time_t speedtest_failsafe_circ_build_stop_time = 0;
 
@@ -4152,7 +4151,7 @@ handle_control_closecircuit(control_connection_t *conn, uint32_t len,
 
   circuit_t *c = TO_CIRCUIT(circ);
   if (c->is_echo_circ) {
-    control_stop_speedtest_circuit(c);
+    control_speedtest_stop_circuit(c);
     send_control_done(conn);
     return 0;
   }
@@ -5373,32 +5372,8 @@ connection_control_closed(control_connection_t *conn)
   }
 
   if (conn == speedtest_control_connection) {
-    log_notice(LD_CONTROL, "Speedtest connection going away. "
-        "Cleaning up circuits");
-    /*
-     * need to cleanup. calling this function will mark circuits for close, and
-     * the mark circuits for close function will ultimately delete our
-     * speedtest_circuits list in control_speedtest_circ_cleanup. Thus we need
-     * to make a copy of the list of our circuits so we can iterate over them.
-     */
-    smartlist_t *circ_list = smartlist_new();
-    smartlist_add_all(circ_list, speedtest_circuits);
-    tor_assert(smartlist_len(circ_list) == smartlist_len(speedtest_circuits));
-    SMARTLIST_FOREACH_BEGIN(circ_list, circuit_t *, c)
-    {
-      control_stop_speedtest_circuit(c);
-    }
-    SMARTLIST_FOREACH_END(c);
-    smartlist_free(circ_list);
-    if (!speedtest_bg_reporter) {
-      /* if not the bg traffic reporting client, we expect these structs to be
-       * gone as of the call to control_stop_speedtest_circuit().
-       * If we are the bg reporter, then we ultimately kept them around and do
-       * not expect them gone yet.
-       */
-      tor_assert(!speedtest_circuits);
-      tor_assert(!speedtest_control_connection);
-    }
+    log_notice(LD_CONTROL, "Speedtest connection going away. Cleaning up");
+    control_speedtest_complete_stop();
   }
 
   if (conn->is_owning_control_connection) {
@@ -5471,6 +5446,96 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</body>\n"
   "</html>\n";
 
+/**
+ * returns 1 if need to pause while stop cell sends, otherwise 0.
+ */
+int
+control_speedtest_stop_circuit(circuit_t *circ)
+{
+  // sanity checks
+  if (!circ)
+    return 0;
+  if (circ->marked_for_close) {
+    log_warn(
+      LD_CONTROL,
+      "Told to stop a speedtest circuit that is marked for close. "
+      "returning early");
+    return 0;
+  }
+  if (time(NULL) < circ->echo_stop_time) {
+    log_warn(
+      LD_CONTROL,
+      "Stopping a speedtest circ before the scheduled stop time");
+  }
+  if (!CIRCUIT_IS_ORIGIN(circ)) {
+    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
+        "origin circ. returning early (1)");
+    return 0;
+  } else if (circ->magic != ORIGIN_CIRCUIT_MAGIC) {
+    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
+        "origin circ. returning early (2)");
+    return 0;
+  }
+  origin_circuit_t *ocirc = TO_ORIGIN_CIRCUIT(circ);
+  if (!ocirc->has_opened) {
+    log_warn(
+      LD_CONTROL,
+      "Told to stop speedtest circuit that isn't open. returning early.");
+    return 0;
+  }
+  // time to start closing. well ... actually if we are bg reporter, we can't
+  // close yet. Need to send off the stop cell to the relay. but for everyone
+  // else we can close them.
+  if (speedtest_bg_reporter) {
+    circ->stop_encrypting_echo_cells = 0;
+    circuit_tell_report_bg_traffic(ocirc, 0);
+    log_notice(
+      LD_CONTROL,
+      "sent stop cell to relay. Should pause while it sends now.");
+    return 1;
+  }
+  circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
+  if (circ->n_chan) {
+    //log_notice(LD_CONTROL, "speedtest circuit has chan, so closing it");
+    channel_mark_for_close(circ->n_chan);
+  } else {
+    log_notice(
+      LD_CONTROL,
+      "speedtest circuit does not have chan, so nothing to close");
+  }
+  return 0;
+}
+
+
+void
+control_speedtest_complete_stop(void)
+{
+  //int a_circuit_is_left_open = 0;
+  // 1. close all speedtest circuits
+  if (!speedtest_circuits) {
+    log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest circuits");
+  } else {
+    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, circ) {
+      if (control_speedtest_stop_circuit(circ)) {
+        //a_circuit_is_left_open = 1;
+      }
+      SMARTLIST_DEL_CURRENT(speedtest_circuits, circ);
+    } SMARTLIST_FOREACH_END(circ);
+    smartlist_free(speedtest_circuits);
+  }
+  // 2. report results?
+  if (!speedtest_control_connection) {
+    log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest ctrl conn");
+  } else {
+    control_change_speedtest_state(
+      speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+    connection_printf_to_buf(
+      speedtest_control_connection, "650 SPEEDTESTING END\r\n");
+    speedtest_control_connection = NULL;
+  }
+  // 3. free memory?
+}
+
 void
 control_speedtest_report_cell_counts(void)
 {
@@ -5508,30 +5573,7 @@ control_speedtest_report_cell_counts(void)
       speedtest_control_connection, "650 SPEEDTESTING %ld %u %u\r\n",
       now, num_recv, num_sent);
   if (now >= first_echo_stop_time) {
-    /*
-     * need to cleanup. calling this function will mark circuits for close, and
-     * the mark circuits for close function will ultimately delete our
-     * speedtest_circuits list in control_speedtest_circ_cleanup. Thus we need
-     * to make a copy of the list of our circuits so we can iterate over them.
-     */
-    smartlist_t *circ_list = smartlist_new();
-    smartlist_add_all(circ_list, speedtest_circuits);
-    tor_assert(smartlist_len(circ_list) == smartlist_len(speedtest_circuits));
-    SMARTLIST_FOREACH_BEGIN(circ_list, circuit_t *, c)
-    {
-      control_stop_speedtest_circuit(c);
-    }
-    SMARTLIST_FOREACH_END(c);
-    smartlist_free(circ_list);
-    if (!speedtest_bg_reporter) {
-      /* if not the bg traffic reporting client, we expect these structs to be
-       * gone as of the call to control_stop_speedtest_circuit().
-       * If we are the bg reporter, then we ultimately kept them around and do
-       * not expect them gone yet.
-       */
-      tor_assert(!speedtest_circuits);
-      tor_assert(!speedtest_control_connection);
-    }
+    control_speedtest_complete_stop();
   }
 }
 
@@ -5548,42 +5590,6 @@ control_speedtest_state_to_string(int state)
     default: tor_assert_unreached(); break;
   };
   return s;
-}
-
-void
-control_stop_speedtest_circuit(circuit_t *circ)
-{
-  //tor_assert(time(NULL) >= circ->echo_stop_time);
-  if (time(NULL) < circ->echo_stop_time) {
-    log_warn(LD_CONTROL, "Stopping a speedtest circ before the scheduled stop time");
-  }
-  if (!CIRCUIT_IS_ORIGIN(circ)) {
-    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
-        "origin circ (1)");
-    return;
-  } else if (circ->magic != ORIGIN_CIRCUIT_MAGIC) {
-    log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
-        "origin circ (2)");
-    return;
-  }
-  origin_circuit_t *origin_circ = TO_ORIGIN_CIRCUIT(circ);
-  if (speedtest_bg_reporter && !pausing_while_stop_cell_sends) {
-    circ->stop_encrypting_echo_cells = 0;
-    circuit_tell_report_bg_traffic(origin_circ, 0);
-    pausing_while_stop_cell_sends = 1;
-    return;
-  }
-  pausing_while_stop_cell_sends = 0;
-  circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
-  if (circ->n_chan)
-    channel_mark_for_close(circ->n_chan);
-  if (speedtest_control_connection) {
-    control_change_speedtest_state(
-        speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
-    connection_printf_to_buf(
-        speedtest_control_connection, "650 SPEEDTESTING END\r\n");
-    speedtest_control_connection = NULL;
-  }
 }
 
 /*
@@ -5644,6 +5650,20 @@ control_change_speedtest_state_to_connected(
           "Circ %u in speedtest circ list, but is not origin circ. Ignoring",
           c->n_circ_id);
       }
+      origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
+      if (!oc->has_opened) {
+          log_warn(LD_OR, "Circuit %u is not open yet", c->n_circ_id);
+          continue;
+      } else if (!c->n_chan) {
+          log_warn(LD_OR, "Circuit %u is open, but no chan", c->n_circ_id);
+          continue;
+      } else if (!BASE_CHAN_TO_TLS(c->n_chan)->conn) {
+          log_warn(LD_OR, "Circuit %u is open with chan, but no or_conn", c->n_circ_id);
+          continue;
+      } else if (TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s < 1) {
+          log_warn(LD_OR, "Circuit %u is open with chan with or_conn, but no socket", c->n_circ_id);
+          continue;
+      }
       log_notice(LD_OR, "Circuit %u is using conn %p sock=%d open=%d",
           c->n_circ_id, TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn),
           TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s,
@@ -5697,9 +5717,6 @@ handle_control_testspeed_when_none(
         "a speedtest_control_connection. Going to replace it.");
   }
   speedtest_control_connection = conn;
-  if (pausing_while_stop_cell_sends) {
-    pausing_while_stop_cell_sends = 0;
-  }
   if (speedtest_circuits) {
     log_warn(LD_CONTROL, "Told to start a new speedtest while we still have "
         "a speedtest_circuits list. Probably going to leak some memory.");
@@ -5751,6 +5768,14 @@ handle_control_testspeed_when_none(
     extend_info_free(info);
     origin_circ->build_state->onehop_tunnel = 0;
 
+    // Mark the circuit as a speedtest circuit
+    circuit_t *circ = TO_CIRCUIT(origin_circ);
+    circ->is_echo_circ = 1;
+    circ->is_echo_circ_bg = speedtest_bg_reporter;
+    conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
+    conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
+    smartlist_add(speedtest_circuits, circ);
+
     // Start extending
     int err_reason = 0;
     if ((err_reason = circuit_handle_first_hop(origin_circ, 1)) < 0) {
@@ -5764,88 +5789,11 @@ handle_control_testspeed_when_none(
     log_notice(LD_CONTROL, "Started a circuit build for TESTSPEED on circ %u",
         origin_circ->global_identifier);
 
-    // Mark the circuit as a speedtest circuit
-    circuit_t *circ = TO_CIRCUIT(origin_circ);
-    circ->is_echo_circ = 1;
-    circ->is_echo_circ_bg = speedtest_bg_reporter;
-    conn->event_mask |= (((event_mask_t)1) << EVENT_TESTSPEED);
-    conn->event_mask |= (((event_mask_t)1) << EVENT_SPEEDTESTING);
-    smartlist_add(speedtest_circuits, circ);
-
     // Send events
     control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
   }
   speedtest_failsafe_circ_build_stop_time = time(NULL) + SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION;
   return NULL;
-}
-
-void
-control_speedtest_circ_cleanup(circuit_t *circ)
-{
-  if (!speedtest_circuits)
-    return;
-  if (!speedtest_control_connection)
-    return;
-  if (speedtest_control_connection->base_.type != CONN_TYPE_CONTROL) {
-    log_warn(
-      LD_CONTROL,
-      "Have a speedtest control conn pointer but its type is %u not %u. "
-      "Assuming this is garbage memory, that we are not in a speedtest, "
-      "and that we should free all the things",
-      speedtest_control_connection->base_.type, CONN_TYPE_CONTROL);
-    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
-      (void)c; // "use" c
-      SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
-    } SMARTLIST_FOREACH_END(c);
-    smartlist_free(speedtest_circuits);
-    speedtest_control_connection = NULL;
-    speedtest_num_connected = 0;
-    return;
-  }
-  if (!circ->is_echo_circ)
-    return;
-  if (!smartlist_contains(speedtest_circuits, circ)) {
-    log_warn(LD_CONTROL, "circ is echo circ but not in list");
-  }
-  const char *state_str = control_speedtest_state_to_string(
-    speedtest_control_connection->speedtest_state);
-  switch (speedtest_control_connection->speedtest_state) {
-    case CTRL_SPEEDTEST_STATE_NONE:
-      log_notice(
-        LD_CONTROL,
-        "circ cleanup in speedtest state %s. Nothing to do", state_str);
-      return;
-    case CTRL_SPEEDTEST_STATE_CONNECTING:
-      connection_printf_to_buf(
-        speedtest_control_connection,
-        "551 SPEEDTESTING closing speedtest circ while in CONNECTING\r\n");
-      break;
-    case CTRL_SPEEDTEST_STATE_CONNECTED:
-      connection_printf_to_buf(
-        speedtest_control_connection,
-        "551 SPEEDTESTING closing speedtest circ while in CONNECTED\r\n");
-      break;
-    case CTRL_SPEEDTEST_STATE_TESTING:
-      connection_printf_to_buf(
-          speedtest_control_connection, "650 SPEEDTESTING END\r\n");
-      break;
-    default: tor_assert_unreached(); break;
-  };
-  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c) {
-    /*
-     * don't mark circuits for close as we could create an infinite loop
-     * since circuit_mark_for_close calls us. Alas, this leaves the
-     * circuits open until Tor gets around to doing something about them.
-     */
-    (void)c; // "use" c
-    //circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
-    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
-  } SMARTLIST_FOREACH_END(c);
-  smartlist_free(speedtest_circuits);
-  speedtest_control_connection = NULL;
-  speedtest_num_connected = 0;
-  speedtest_failsafe_circ_build_stop_time = 0;
-  return;
 }
 
 static const char *

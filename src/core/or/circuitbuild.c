@@ -522,6 +522,15 @@ circuit_handle_first_hop(origin_circuit_t *circ, int force_new_conn)
   int should_launch = 0;
   const or_options_t *options = get_options();
 
+  //// TESTTESTTEST induce failures
+  //int r;
+  //crypto_rand((char*)&r, sizeof(int));
+  //if (TO_CIRCUIT(circ)->is_echo_circ && r % 8 == 0) {
+  //    log_notice(LD_OR, "NOT handling first hop to induce failure in echo circ");
+  //    return 0;
+  //}
+  //// TESTTESTTEST induce failures
+
   firsthop = onion_next_hop_in_cpath(circ->cpath);
   tor_assert(firsthop);
   tor_assert(firsthop->extend_info);
