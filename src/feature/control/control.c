@@ -5446,8 +5446,24 @@ static const char CONTROLPORT_IS_NOT_AN_HTTP_PROXY_MSG[] =
   "</body>\n"
   "</html>\n";
 
+static void
+control_speedtest_remove_from_circuit_list(circuit_t *circ) {
+  if (!speedtest_circuits) return;
+  int old_len = smartlist_len(speedtest_circuits);
+  smartlist_remove(speedtest_circuits, circ);
+  int new_len = smartlist_len(speedtest_circuits);
+  log_notice(
+    LD_CONTROL, "Looked for circ %p in speedtest list. len old=%d new=%d",
+    circ, old_len, new_len);
+}
+
 /**
  * returns 1 if need to pause while stop cell sends, otherwise 0.
+ *
+ * This will remove circuits from the speedtest_circuits list by way of a call
+ * to control_speedtest_remove_from_circuit_list(). Do not iterate over
+ * speedtest_circuits with SMARLIST_FOREACH or similar and call this function.
+ * Consider smartlist_pop_last instead.
  */
 int
 control_speedtest_stop_circuit(circuit_t *circ)
@@ -5460,6 +5476,7 @@ control_speedtest_stop_circuit(circuit_t *circ)
       LD_CONTROL,
       "Told to stop a speedtest circuit that is marked for close. "
       "returning early");
+    control_speedtest_remove_from_circuit_list(circ);
     return 0;
   }
   if (time(NULL) < circ->echo_stop_time) {
@@ -5470,10 +5487,12 @@ control_speedtest_stop_circuit(circuit_t *circ)
   if (!CIRCUIT_IS_ORIGIN(circ)) {
     log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
         "origin circ. returning early (1)");
+    control_speedtest_remove_from_circuit_list(circ);
     return 0;
   } else if (circ->magic != ORIGIN_CIRCUIT_MAGIC) {
     log_warn(LD_CONTROL, "Told to stop speedtest circuit that isn't an "
         "origin circ. returning early (2)");
+    control_speedtest_remove_from_circuit_list(circ);
     return 0;
   }
   origin_circuit_t *ocirc = TO_ORIGIN_CIRCUIT(circ);
@@ -5481,6 +5500,7 @@ control_speedtest_stop_circuit(circuit_t *circ)
     log_warn(
       LD_CONTROL,
       "Told to stop speedtest circuit that isn't open. returning early.");
+    control_speedtest_remove_from_circuit_list(circ);
     return 0;
   }
   // time to start closing. well ... actually if we are bg reporter, we can't
@@ -5503,6 +5523,7 @@ control_speedtest_stop_circuit(circuit_t *circ)
       LD_CONTROL,
       "speedtest circuit does not have chan, so nothing to close");
   }
+  control_speedtest_remove_from_circuit_list(circ);
   return 0;
 }
 
@@ -5515,12 +5536,12 @@ control_speedtest_complete_stop(void)
   if (!speedtest_circuits) {
     log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest circuits");
   } else {
-    SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, circ) {
+    circuit_t *circ = NULL;
+    while ((circ = smartlist_pop_last(speedtest_circuits)) != NULL) {
       if (control_speedtest_stop_circuit(circ)) {
         //a_circuit_is_left_open = 1;
       }
-      SMARTLIST_DEL_CURRENT(speedtest_circuits, circ);
-    } SMARTLIST_FOREACH_END(circ);
+    }
     smartlist_free(speedtest_circuits);
   }
   // 2. report results?
