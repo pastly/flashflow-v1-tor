@@ -5649,6 +5649,7 @@ control_change_speedtest_state_to_connected(
           LD_OR,
           "Circ %u in speedtest circ list, but is not origin circ. Ignoring",
           c->n_circ_id);
+	SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
 	continue;
       }
       origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
