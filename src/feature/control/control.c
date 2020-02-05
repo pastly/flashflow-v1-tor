@@ -5692,6 +5692,10 @@ control_change_speedtest_state_to_connected(
           c->n_circ_id, TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn),
           TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->s,
           TO_ORIGIN_CIRCUIT(c)->has_opened);
+      // if bg reporter, we need to get our msm start cell to the relay before the
+      // other clients get their first echo cells to it. Thus we send it now.
+      if (speedtest_bg_reporter)
+        circuit_tell_report_bg_traffic(oc, 1);
     }
     SMARTLIST_FOREACH_END(c);
   }
@@ -5865,8 +5869,11 @@ handle_control_testspeed_when_connected(
     if (oc->has_opened) {
       if (!speedtest_bg_reporter)
         circuit_send_speedtest_cells(oc);
-      else
-        circuit_tell_report_bg_traffic(oc, 1);
+      else {
+        // We used to do this here. But to insure the relay is informed of the
+        // msm starting ASAP, we tell the relay to report bg traffic earlier.
+        //circuit_tell_report_bg_traffic(oc, 1);
+      }
     } else {
       log_warn(
         LD_CONTROL, "Circ %d not open, so not telling it to send cells "

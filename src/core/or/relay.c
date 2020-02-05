@@ -141,7 +141,7 @@ uint64_t stats_n_relay_cells_delivered = 0;
 uint64_t stats_n_circ_max_cell_reached = 0;
 
 static circuit_t *saved_coord_circ = NULL;
-#define SPEEDTEST_FAILSAFE_MEAUSRE_DURATION 35
+#define SPEEDTEST_FAILSAFE_MEAUSRE_DURATION 40
 static time_t speedtest_failsafe_measure_stop_time = 0;
 static uint64_t speedtest_original_bandwidth_burst = 0;
 
