@@ -287,18 +287,19 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
 
   /* Echo circ on the relay side */
   if (circ->is_echo_circ && CIRCUIT_IS_ORCIRC(circ)) {
+    or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
+    chan = or_circ->p_chan;
     if (!saved_coord_circ || !speedtest_failsafe_measure_stop_time) {
       log_warn(
         LD_OR, "Read an echo cell but saved coord circ %p and failsafe "
 	"measure stop time %d. Marking circ for close",
 	saved_coord_circ, (int)speedtest_failsafe_measure_stop_time);
       circuit_mark_for_close(circ, -END_CIRC_REASON_INTERNAL);
+      connection_or_close_normally(BASE_CHAN_TO_TLS(chan)->conn, 0);
       return 0;
     }
     //log_notice(LD_OR, "Got echo cell (2/2)");
-    or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
     cell->circ_id = or_circ->p_circ_id;
-    chan = or_circ->p_chan;
     chan->has_echo_circ = 1;
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
     cell_queue_t *queue = &or_circ->p_chan_cells;
@@ -1565,7 +1566,8 @@ close_echo_channels(void) {
   SMARTLIST_FOREACH_BEGIN(all_channels, channel_t *, chan_i) {
       if (chan_i->has_echo_circ) {
           // mark for close
-          channel_mark_for_close(chan_i);
+          //channel_mark_for_close(chan_i);
+          connection_or_close_normally(BASE_CHAN_TO_TLS(chan_i)->conn, 0);
           num_chans_closed++;
       }
   } SMARTLIST_FOREACH_END(chan_i);
