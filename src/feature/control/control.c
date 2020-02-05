@@ -5815,7 +5815,10 @@ handle_control_testspeed_when_none(
     // Send events
     control_event_circuit_status(origin_circ, CIRC_EVENT_LAUNCHED, 0);
   }
-  speedtest_failsafe_circ_build_stop_time = time(NULL) + SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION;
+  speedtest_failsafe_circ_build_stop_time =
+    time(NULL) +
+    (speedtest_bg_reporter ? SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION * 2 :
+       SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION * 1);
   return NULL;
 }
 
