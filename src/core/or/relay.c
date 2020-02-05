@@ -287,6 +287,14 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
 
   /* Echo circ on the relay side */
   if (circ->is_echo_circ && CIRCUIT_IS_ORCIRC(circ)) {
+    if (!saved_coord_circ || !speedtest_failsafe_measure_stop_time) {
+      log_warn(
+        LD_OR, "Read an echo cell but saved coord circ %p and failsafe "
+	"measure stop time %d. Marking circ for close",
+	saved_coord_circ, (int)speedtest_failsafe_measure_stop_time);
+      circuit_mark_for_close(circ, -END_CIRC_REASON_INTERNAL);
+      return 0;
+    }
     //log_notice(LD_OR, "Got echo cell (2/2)");
     or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
     cell->circ_id = or_circ->p_circ_id;
@@ -1596,6 +1604,7 @@ handle_relay_speedtest_startstop_cell(
     set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count));
     append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
     saved_coord_circ = NULL;
+    speedtest_failsafe_measure_stop_time = 0;
   }
 }
 
