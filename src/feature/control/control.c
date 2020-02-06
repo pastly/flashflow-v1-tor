@@ -475,6 +475,20 @@ control_get_bytes_rw_last_sec(uint64_t *n_read,
 }
 
 static void
+free_speedtest_circuits(void)
+{
+  if (!speedtest_circuits)
+    return;
+  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
+  {
+    circuit_mark_for_close(c, -END_CIRC_REASON_INTERNAL);
+    SMARTLIST_DEL_CURRENT(speedtest_circuits, c);
+  }
+  SMARTLIST_FOREACH_END(c);
+  smartlist_free(speedtest_circuits);
+}
+
+static void
 control_speedtest_force_connected(void) {
   if (!speedtest_circuits)
     return;
@@ -492,7 +506,9 @@ control_speedtest_force_connected(void) {
   // too much time has passed and have 0 speedtest circuits
   else if (now > speedtest_failsafe_circ_build_stop_time) {
     connection_printf_to_buf(speedtest_control_connection, "552 No speedtest circuits connected\r\n");
-    control_speedtest_complete_stop();
+    control_change_speedtest_state(speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+    free_speedtest_circuits();
+    speedtest_control_connection = NULL;
     speedtest_failsafe_circ_build_stop_time = 0;
   }
 }
@@ -5517,7 +5533,7 @@ void
 control_speedtest_complete_stop(void)
 {
   //int a_circuit_is_left_open = 0;
-  // close all speedtest circuits
+  // 1. close all speedtest circuits
   if (!speedtest_circuits) {
     log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest circuits");
   } else {
@@ -5529,17 +5545,17 @@ control_speedtest_complete_stop(void)
     }
     smartlist_free(speedtest_circuits);
   }
-  // tell control conn we are done
+  // 2. report results?
   if (!speedtest_control_connection) {
     log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest ctrl conn");
   } else {
+    control_change_speedtest_state(
+      speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
     connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING END\r\n");
     speedtest_control_connection = NULL;
   }
-  control_change_speedtest_state(
-    speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
-  speedtest_failsafe_circ_build_stop_time = 0;
+  // 3. free memory?
 }
 
 void
@@ -5907,7 +5923,9 @@ handle_control_testspeed(
   };
   if (err_msg) {
     connection_printf_to_buf(conn, "552 %s\r\n", err_msg);
-    control_speedtest_complete_stop();
+    speedtest_control_connection = NULL;
+    free_speedtest_circuits();
+    control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_NONE);
   } else {
     //connection_printf_to_buf(conn, "250 SPEEDTESTING %u\r\n", 42069);
   }
