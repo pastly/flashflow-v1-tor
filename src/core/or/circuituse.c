@@ -1671,7 +1671,7 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   //log_info(LD_CONTROL, "Sending speedtest cells ...");
   int count = 0;
   int res;
-  while (!circ->streams_blocked_on_n_chan && time(NULL) < circ->echo_stop_time) {
+  while (!circ->streams_blocked_on_n_chan && time(NULL) < control_speedtest_stop_time()) {
     res = relay_send_command_from_edge(
         0, circ, RELAY_COMMAND_PING, NULL, 0, origin_circ->cpath);
     if (res < 0) {
@@ -1684,12 +1684,6 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
     }
   }
   log_info(LD_CONTROL, "Sent %d echo cells", count);
-  //control_speedtest_report_cell_counts();
-  time_t now = time(NULL);
-  if (now >= circ->echo_stop_time) {
-    log_notice(LD_CONTROL, "It's time to stop the speedtest (circuituse.c)");
-    control_speedtest_complete_stop();
-  }
 }
 
 void

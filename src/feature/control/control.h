@@ -23,6 +23,7 @@ void control_change_speedtest_state(control_connection_t *, int);
 control_connection_t * get_speedtest_control_connection(void);
 void control_speedtest_complete_stop(void);
 int control_speedtest_stop_circuit(circuit_t *circ);
+time_t control_speedtest_stop_time(void);
 
 
 /** Used to indicate the type of a circuit event passed to the controller.

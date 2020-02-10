@@ -96,7 +96,6 @@ struct circuit_t {
   unsigned int is_echo_circ : 1;
   unsigned int is_echo_circ_bg : 1;
   unsigned int stop_encrypting_echo_cells : 1;
-  time_t echo_stop_time;
 
   uint8_t state; /**< Current status of this circuit. */
   uint8_t purpose; /**< Why are we creating this circuit? */
