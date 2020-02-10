@@ -5891,9 +5891,7 @@ handle_control_testspeed_when_connected(
   time_t now = time(NULL);
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
   {
-    c->echo_duration = duration;
     c->echo_stop_time = now + (time_t)duration;
-    c->echo_duration = duration;
     origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
     if (oc->has_opened) {
       if (!speedtest_bg_reporter)
