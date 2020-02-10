@@ -132,9 +132,8 @@ void scheduler_channel_wants_writes(channel_t *chan);
 MOCK_DECL(void, scheduler_channel_doesnt_want_writes, (channel_t *chan));
 MOCK_DECL(void, scheduler_channel_has_waiting_cells, (channel_t *chan));
 
-void scheduler_reset_cell_counter_and_start_counting(
-    uint32_t report_interval_ms);
-uint32_t scheduler_get_cell_counter_and_stop_counting(void);
+void scheduler_notify_msm_starting(void);
+void scheduler_notify_msm_stopping(void);
 
 /*****************************************************************************
  * Private scheduler functions

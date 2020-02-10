@@ -182,10 +182,7 @@ static int have_logged_kist_suddenly_disabled = 0;
 static int32_t scheduler_cell_write_limit = 0;
 static double scheduler_cell_write_limit_factor = 0.50;
 
-static int scheduler_currently_counting_cells = 0;
-static uint32_t scheduler_reporting_interval_ms = 0;
-static uint32_t scheduler_reporting_cell_count = 0;
-static monotime_t scheduler_last_report_time;
+static int scheduler_currently_in_measurement = 0;
 static uint32_t scheduler_echo_cell_must_accumulate = 0;
 
 /*****************************************************************************
@@ -237,7 +234,7 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
   } else if (sched->is_special) {
     // If two sched and this one is the special one, don't limit it
     cell_limit_this_time = INT_MAX;
-  } else if (!scheduler_currently_counting_cells) {
+  } else if (!scheduler_currently_in_measurement) {
     // If two sched, this isn't the special one, and a measurement is not going
     // on, then don't limit it
     cell_limit_this_time = INT_MAX;
@@ -315,20 +312,6 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
       get_scheduler_type_string(sched->type),
       num_scheduled_cells, cell_limit_this_time);
   tor_assert(num_scheduled_cells >= 0);
-  if (scheduler_currently_counting_cells) {
-    monotime_t now;
-    int64_t diff;
-    if (get_options()->SplitScheduler && !sched->is_special) {
-      scheduler_reporting_cell_count += num_scheduled_cells;
-    }
-    monotime_get(&now);
-    diff = monotime_diff_msec(&scheduler_last_report_time, &now);
-    if (diff >= scheduler_reporting_interval_ms) {
-      report_cell_count(scheduler_reporting_cell_count);
-      scheduler_reporting_cell_count = 0;
-      scheduler_last_report_time = now;
-    }
-  }
   if (get_options()->SplitScheduler) {
     // If using two schedulers, we need to adjust the write limit now
     if (!sched->is_special)
@@ -600,19 +583,15 @@ scheduler_compare_channels, (const void *c1_v, const void *c2_v))
  *****************************************************************************/
 
 void
-scheduler_reset_cell_counter_and_start_counting(uint32_t report_interval_ms_)
+scheduler_notify_msm_starting(void)
 {
-  scheduler_currently_counting_cells = 1;
-  scheduler_reporting_interval_ms = report_interval_ms_;
-  monotime_get(&scheduler_last_report_time);
-  scheduler_reporting_cell_count = 0;
+  scheduler_currently_in_measurement = 1;
 }
 
-uint32_t
-scheduler_get_cell_counter_and_stop_counting(void)
+void
+scheduler_notify_msm_stopping(void)
 {
-  scheduler_currently_counting_cells = 0;
-  return scheduler_reporting_cell_count;
+  scheduler_currently_in_measurement = 0;
 }
 
 /**

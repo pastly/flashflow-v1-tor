@@ -1496,7 +1496,7 @@ connection_edge_process_relay_cell_not_open(
 }
 
 #define RH_LEN 11
-void
+static void
 report_cell_count(uint32_t cell_count)
 {
   if (!saved_coord_circ)
@@ -1575,15 +1575,26 @@ close_echo_channels(void) {
   log_notice(LD_EDGE, "Marked %d echo chans for close", num_chans_closed);
 }
 
+static uint64_t prev_msm_bytes_read = 0;
+static uint64_t prev_msm_bytes_written = 0;
+
+static void
+relay_get_msm_bytes_rw_last_sec(uint64_t *n_read, uint64_t *n_written)
+{
+  const uint64_t read = get_msm_bytes_read();
+  const uint64_t written = get_msm_bytes_written();
+  *n_read = read - prev_msm_bytes_read;
+  *n_written = written - prev_msm_bytes_written;
+  prev_msm_bytes_read = read;
+  prev_msm_bytes_written = written;
+}
+
 static void
 handle_relay_speedtest_startstop_cell(
     cell_t *cell, circuit_t *circ, edge_connection_t *conn)
 {
   (void)conn; // so it is "used"
-  uint32_t cell_count = 0;
   relay_speedtest_startstop_cell_t ss;
-  or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
-  channel_t *chan = or_circ->p_chan;
 
   parse_inbound_relay_speedtest_startstop(&ss, cell->payload+RH_LEN);
   if (ss.is_start) {
@@ -1600,12 +1611,12 @@ handle_relay_speedtest_startstop_cell(
   }
 
   if (ss.is_start) {
-    scheduler_reset_cell_counter_and_start_counting(ss.report_interval_ms);
+    scheduler_notify_msm_starting();
     saved_coord_circ = circ;
+    uint64_t r, w;
+    relay_get_msm_bytes_rw_last_sec(&r, &w);
   } else {
-    cell_count = scheduler_get_cell_counter_and_stop_counting();
-    set_uint32(cell->payload+RH_LEN, tor_htonl(cell_count));
-    append_cell_to_circuit_queue(circ, chan, cell, CELL_DIRECTION_IN, 0);
+    scheduler_notify_msm_stopping();
     saved_coord_circ = NULL;
     speedtest_failsafe_measure_stop_time = 0;
   }
@@ -1615,10 +1626,18 @@ handle_relay_speedtest_startstop_cell(
 
 void
 relay_per_second_events(void) {
+  if (saved_coord_circ && saved_coord_circ->state == CIRCUIT_STATE_OPEN) {
+    uint64_t msm_read, msm_written;
+    relay_get_msm_bytes_rw_last_sec(&msm_read, &msm_written);
+    uint64_t all_bytes_written = get_bytes_written();
+    uint64_t bg_bytes_written = all_bytes_written - msm_written;
+    uint32_t approx_bg_cells_written = (uint32_t)bg_bytes_written / 514;
+    report_cell_count(approx_bg_cells_written);
+  }
   time_t now = time(NULL);
   if (speedtest_failsafe_measure_stop_time && now > speedtest_failsafe_measure_stop_time) {
     log_notice(LD_EDGE, "Speedtest has gone on too long. Failing safe.");
-    scheduler_get_cell_counter_and_stop_counting();
+    scheduler_notify_msm_stopping();
     reset_bw_burst();
     close_echo_channels();
     saved_coord_circ = NULL;
