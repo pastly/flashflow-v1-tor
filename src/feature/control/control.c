@@ -5530,7 +5530,7 @@ control_speedtest_stop_circuit(circuit_t *circ)
     return 1;
   }
   circuit_mark_for_close(circ, END_CIRC_REASON_FINISHED);
-  if (circ->n_chan) {
+  if (circ->n_chan && BASE_CHAN_TO_TLS(circ->n_chan)->conn) {
     //log_notice(LD_CONTROL, "speedtest circuit has chan, so closing it");
     //channel_mark_for_close(circ->n_chan);
     connection_or_close_normally(BASE_CHAN_TO_TLS(circ->n_chan)->conn, 0);
