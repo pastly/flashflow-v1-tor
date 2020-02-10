@@ -140,6 +140,7 @@ static int speedtest_num_connected = 0;
 static int speedtest_bg_reporter = 0;
 #define SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION 5
 static time_t speedtest_failsafe_circ_build_stop_time = 0;
+static time_t speedtest_stop_time = 0;
 
 /** Yield true iff <b>s</b> is the state of a control_connection_t that has
  * finished authentication and is accepting commands. */
@@ -5494,7 +5495,7 @@ control_speedtest_stop_circuit(circuit_t *circ)
     control_speedtest_remove_from_circuit_list(circ);
     return 0;
   }
-  if (time(NULL) < circ->echo_stop_time) {
+  if (time(NULL) < speedtest_stop_time) {
     log_warn(
       LD_CONTROL,
       "Stopping a speedtest circ before the scheduled stop time");
@@ -5548,7 +5549,6 @@ void
 control_speedtest_complete_stop(void)
 {
   //int a_circuit_is_left_open = 0;
-  // 1. close all speedtest circuits
   if (!speedtest_circuits) {
     log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest circuits");
   } else {
@@ -5560,7 +5560,6 @@ control_speedtest_complete_stop(void)
     }
     smartlist_free(speedtest_circuits);
   }
-  // 2. report results?
   if (!speedtest_control_connection) {
     log_warn(LD_CONTROL, "speedtest complete stop, but no speedtest ctrl conn");
   } else {
@@ -5570,7 +5569,7 @@ control_speedtest_complete_stop(void)
       speedtest_control_connection, "650 SPEEDTESTING END\r\n");
     speedtest_control_connection = NULL;
   }
-  // 3. free memory?
+  speedtest_stop_time = 0;
 }
 
 static uint64_t prev_msm_bytes_read = 0;
@@ -5607,6 +5606,9 @@ control_speedtest_report_msm_traffic(void)
   connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING %ld %" PRIu64 " %" PRIu64 "\r\n",
       now, msm_read, msm_written);
+  if (time(NULL) > speedtest_stop_time) {
+    control_speedtest_complete_stop();
+  }
 }
 
 void
@@ -5627,6 +5629,9 @@ control_speedtest_report_bg_traffic(uint64_t bg_read, uint64_t bg_written)
   connection_printf_to_buf(
       speedtest_control_connection, "650 SPEEDTESTING %ld %" PRIu64 " %" PRIu64 "\r\n",
       now, bg_read, bg_written);
+  if (time(NULL) > speedtest_stop_time) {
+    control_speedtest_complete_stop();
+  }
 }
 
 const char *
@@ -5889,9 +5894,10 @@ handle_control_testspeed_when_connected(
   uint64_t r, w;
   control_get_msm_bytes_rw_last_sec(&r, &w);
   time_t now = time(NULL);
+  speedtest_stop_time = now + (time_t)duration;
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
   {
-    c->echo_stop_time = now + (time_t)duration;
+    c->echo_stop_time = speedtest_stop_time;
     origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
     if (oc->has_opened) {
       if (!speedtest_bg_reporter)
