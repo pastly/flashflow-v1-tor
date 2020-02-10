@@ -2204,8 +2204,11 @@ circuit_mark_for_close_, (circuit_t *circ, int reason, int line,
   /* Notify the HS subsystem that this circuit is closing. */
   hs_circ_cleanup(circ);
   /* Notify speedtest system */
-  if (circ->is_echo_circ)
+  if (circ->is_echo_circ) {
+    log_notice(
+      LD_OR, "speedtest circ marked for close. telling control system");
     control_speedtest_stop_circuit(circ);
+  }
 
   if (circuits_pending_close == NULL)
     circuits_pending_close = smartlist_new();

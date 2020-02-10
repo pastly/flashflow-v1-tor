@@ -500,15 +500,26 @@ control_speedtest_force_connected(void) {
     return;
   time_t now = time(NULL);
   // too much time has passed and we have at least 1 speedtest circuit
-  if (now > speedtest_failsafe_circ_build_stop_time && speedtest_num_connected)
+  if (now > speedtest_failsafe_circ_build_stop_time && speedtest_num_connected) {
+      log_warn(
+        LD_CONTROL, "%d speedtest circuits built. Forcing ourselves to start. "
+        "force_connected", speedtest_num_connected);
       control_change_speedtest_state_to_connected(
               speedtest_control_connection, 0, 1);
   // too much time has passed and have 0 speedtest circuits
-  else if (now > speedtest_failsafe_circ_build_stop_time) {
-    connection_printf_to_buf(speedtest_control_connection, "552 No speedtest circuits connected\r\n");
-    control_change_speedtest_state(speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
-    free_speedtest_circuits();
-    speedtest_control_connection = NULL;
+  } else if (now > speedtest_failsafe_circ_build_stop_time) {
+    if (speedtest_control_connection) {
+      connection_printf_to_buf(speedtest_control_connection, "552 No speedtest circuits connected\r\n");
+    }
+    //free_speedtest_circuits();
+    log_notice(
+      LD_CONTROL,
+      "0 speedtest circuits built. Time to stop speedtest. force_connected");
+    control_speedtest_complete_stop();
+    if (speedtest_control_connection) {
+      control_change_speedtest_state(speedtest_control_connection, CTRL_SPEEDTEST_STATE_NONE);
+      speedtest_control_connection = NULL;
+    }
     speedtest_failsafe_circ_build_stop_time = 0;
   }
 }
@@ -4151,6 +4162,10 @@ handle_control_closecircuit(control_connection_t *conn, uint32_t len,
 
   circuit_t *c = TO_CIRCUIT(circ);
   if (c->is_echo_circ) {
+    log_warn(
+      LD_CONTROL,
+      "CLOSECIRCUIT cmd regarding speedtest circ. Unexpected, but will "
+      "close it.");
     control_speedtest_stop_circuit(c);
     send_control_done(conn);
     return 0;
@@ -5595,6 +5610,7 @@ control_speedtest_report_cell_counts(void)
       speedtest_control_connection, "650 SPEEDTESTING %ld %u %u\r\n",
       now, num_recv, num_sent);
   if (now >= first_echo_stop_time) {
+    log_notice(LD_CONTROL, "Time to stop speedtest. report_cell_counts");
     control_speedtest_complete_stop();
   }
 }
