@@ -266,7 +266,7 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
     uint32_t num_cells = tor_ntohl(get_uint32(cell->payload+RH_LEN));
 #undef RH_LEN
     circ->num_recv_echo_cells = circ->num_sent_echo_cells = num_cells;
-    control_speedtest_report_cell_counts();
+    control_speedtest_report_bg_traffic(num_cells * 514, num_cells * 514);
     //log_notice(LD_OR, "Got echo cell, we are bg (1/2)");
     return 0;
   } else if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {

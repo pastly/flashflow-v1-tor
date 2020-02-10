@@ -278,6 +278,7 @@ static void flush_queued_events_cb(mainloop_event_t *event, void *arg);
 
 static char * download_status_to_string(const download_status_t *dl);
 static void control_get_bytes_rw_last_sec(uint64_t *r, uint64_t *w);
+static void control_speedtest_report_msm_traffic(void);
 
 /** Convert a connection_t* to an control_connection_t*; assert if the cast is
  * invalid. */
@@ -542,7 +543,7 @@ control_per_second_events(void)
   control_event_conn_bandwidth_used();
   control_event_circ_bandwidth_used();
   control_event_circuit_cell_stats();
-  control_speedtest_report_cell_counts();
+  control_speedtest_report_msm_traffic();
   control_speedtest_force_connected();
 }
 
@@ -5573,8 +5574,22 @@ control_speedtest_complete_stop(void)
   // 3. free memory?
 }
 
-void
-control_speedtest_report_cell_counts(void)
+static uint64_t prev_msm_bytes_read = 0;
+static uint64_t prev_msm_bytes_written = 0;
+
+static void
+control_get_msm_bytes_rw_last_sec(uint64_t *n_read, uint64_t *n_written)
+{
+  const uint64_t read = get_msm_bytes_read();
+  const uint64_t written = get_msm_bytes_written();
+  *n_read = read - prev_msm_bytes_read;
+  *n_written = written - prev_msm_bytes_written;
+  prev_msm_bytes_read = read;
+  prev_msm_bytes_written = written;
+}
+
+static void
+control_speedtest_report_msm_traffic(void)
 {
   if (!speedtest_circuits)
     return;
@@ -5582,37 +5597,36 @@ control_speedtest_report_cell_counts(void)
     return;
   if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_TESTING)
     return;
-  time_t now = time(NULL);
-  if (now < speedtest_last_report_time + 1)
+  if (speedtest_bg_reporter)
     return;
-  speedtest_last_report_time = now;
-  time_t first_echo_stop_time = 0;
-  uint32_t num_recv = 0;
-  uint32_t num_sent = 0;
-  SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
-  {
-    if (first_echo_stop_time == 0) {
-      first_echo_stop_time = c->echo_stop_time;
-    } else if (c->echo_stop_time < first_echo_stop_time) {
-      first_echo_stop_time = c->echo_stop_time;
-    }
-    num_recv += c->num_recv_echo_cells * 514;
-    num_sent += c->num_sent_echo_cells * 514;
-    c->num_recv_echo_cells = 0;
-    c->num_sent_echo_cells = 0;
-  }
-  SMARTLIST_FOREACH_END(c);
+  uint64_t msm_read, msm_written;
+  time_t now = time(NULL);
+  control_get_msm_bytes_rw_last_sec(&msm_read, &msm_written);
   log_notice(
-      LD_CONTROL, "Reporting %u/%u recv/sent %s bytes",
-      num_recv, num_sent,
-      speedtest_bg_reporter ? "background" : "measurement");
+      LD_CONTROL, "Reporting %" PRIu64 "/%" PRIu64 " recv/sent measurement bytes",
+      msm_read, msm_written);
   connection_printf_to_buf(
-      speedtest_control_connection, "650 SPEEDTESTING %ld %u %u\r\n",
-      now, num_recv, num_sent);
-  if (now >= first_echo_stop_time) {
-    log_notice(LD_CONTROL, "Time to stop speedtest. report_cell_counts");
-    control_speedtest_complete_stop();
-  }
+      speedtest_control_connection, "650 SPEEDTESTING %ld %" PRIu64 " %" PRIu64 "\r\n",
+      now, msm_read, msm_written);
+}
+
+void
+control_speedtest_report_bg_traffic(uint64_t bg_read, uint64_t bg_written)
+{
+  if (!speedtest_circuits)
+    return;
+  if (!speedtest_control_connection)
+    return;
+  if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_TESTING)
+    return;
+  tor_assert(!speedtest_bg_reporter);
+  time_t now = time(NULL);
+  log_notice(
+      LD_CONTROL, "Reporting %" PRIu64 "/%" PRIu64 " recv/sent background bytes",
+      bg_read, bg_written);
+  connection_printf_to_buf(
+      speedtest_control_connection, "650 SPEEDTESTING %ld %" PRIu64 " %" PRIu64 "\r\n",
+      now, bg_read, bg_written);
 }
 
 const char *
@@ -5872,6 +5886,8 @@ handle_control_testspeed_when_connected(
   }
   log_notice(LD_CONTROL, "Told to TESTSPEED for %u secs", duration);
   control_change_speedtest_state(conn, CTRL_SPEEDTEST_STATE_TESTING);
+  uint64_t r, w;
+  control_get_msm_bytes_rw_last_sec(&r, &w);
   time_t now = time(NULL);
   speedtest_last_report_time = now;
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
