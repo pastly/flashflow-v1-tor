@@ -64,6 +64,7 @@ struct connection_t {
   /** True if connection_handle_write is currently running on this connection.
    */
   unsigned int in_connection_handle_write:1;
+  unsigned int has_echo_circ:1;
 
   /* For linked connections:
    */

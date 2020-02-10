@@ -530,6 +530,7 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
   conn->timestamp_created = now;
   conn->timestamp_last_read_allowed = now;
   conn->timestamp_last_write_allowed = now;
+  conn->has_echo_circ = 0;
 }
 
 /** Create a link between <b>conn_a</b> and <b>conn_b</b>. */
@@ -3208,7 +3209,8 @@ static time_t last_recorded_accounting_at = 0;
  * <b>num_written</b> bytes on <b>conn</b>. */
 static void
 record_num_bytes_transferred_impl(connection_t *conn,
-                             time_t now, size_t num_read, size_t num_written)
+                             time_t now, size_t num_read, size_t num_written,
+                             int is_msm)
 {
   /* Count bytes of answering direct and tunneled directory requests */
   if (conn->type == CONN_TYPE_DIR && conn->purpose == DIR_PURPOSE_SERVER) {
@@ -3235,7 +3237,7 @@ record_num_bytes_transferred_impl(connection_t *conn,
     rep_hist_note_exit_bytes(conn->port, num_written, num_read);
 
   /* Remember these bytes towards statistics. */
-  stats_increment_bytes_read_and_written(num_read, num_written);
+  stats_increment_bytes_read_and_written(num_read, num_written, is_msm);
 
   /* Remember these bytes towards accounting. */
   if (accounting_is_enabled(get_options())) {
@@ -3253,7 +3255,7 @@ record_num_bytes_transferred_impl(connection_t *conn,
  * onto <b>conn</b>. Decrement buckets appropriately. */
 static void
 connection_buckets_decrement(connection_t *conn, time_t now,
-                             size_t num_read, size_t num_written)
+                             size_t num_read, size_t num_written, int is_msm)
 {
   if (num_written >= INT_MAX || num_read >= INT_MAX) {
     log_err(LD_BUG, "Value out of range. num_read=%lu, num_written=%lu, "
@@ -3268,7 +3270,7 @@ connection_buckets_decrement(connection_t *conn, time_t now,
       num_read = 1;
   }
 
-  record_num_bytes_transferred_impl(conn, now, num_read, num_written);
+  record_num_bytes_transferred_impl(conn, now, num_read, num_written, is_msm);
 
   if (!connection_is_rate_limited(conn))
     return; /* local IPs are free */
@@ -3621,7 +3623,17 @@ connection_handle_read_impl(connection_t *conn)
        * accurately. Note that since we read the bytes from conn, and
        * we're writing the bytes onto the linked connection, we count
        * these as <i>written</i> bytes. */
-      connection_buckets_decrement(linked, approx_time(), 0, n_read);
+      int has_echo_circ;
+      if (conn->has_echo_circ != linked->has_echo_circ) {
+        log_warn(
+            LD_NET,
+            "conn/linked has echo circ %d/%d. Going with true",
+            conn->has_echo_circ, linked->has_echo_circ);
+        has_echo_circ = 1;
+      } else {
+        has_echo_circ = conn->has_echo_circ;
+      }
+      connection_buckets_decrement(linked, approx_time(), 0, n_read, has_echo_circ);
 
       if (connection_flushed_some(linked) < 0)
         connection_mark_for_close(linked);
@@ -3823,7 +3835,7 @@ connection_buf_read_from_socket(connection_t *conn, ssize_t *max_to_read,
     }
   }
 
-  connection_buckets_decrement(conn, approx_time(), n_read, n_written);
+  connection_buckets_decrement(conn, approx_time(), n_read, n_written, conn->has_echo_circ);
 
   if (more_to_read && result == at_most) {
     slack_in_buf = buf_slack(conn->inbuf);
@@ -4145,7 +4157,7 @@ connection_handle_write_impl(connection_t *conn, int force)
       conn->n_written_conn_bw = UINT32_MAX;
   }
 
-  connection_buckets_decrement(conn, approx_time(), n_read, n_written);
+  connection_buckets_decrement(conn, approx_time(), n_read, n_written, conn->has_echo_circ);
 
   if (result > 0) {
     /* If we wrote any bytes from our buffer, then call the appropriate

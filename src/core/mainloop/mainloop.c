@@ -143,6 +143,8 @@ token_bucket_rw_t global_relayed_bucket;
 static uint64_t stats_n_bytes_read = 0;
 /** How many bytes have we written since we started the process? */
 static uint64_t stats_n_bytes_written = 0;
+static uint64_t stats_n_msm_bytes_read = 0;
+static uint64_t stats_n_msm_bytes_written = 0;
 /** What time did this process start up? */
 time_t time_of_process_start = 0;
 /** How many seconds have we been running? */
@@ -482,15 +484,29 @@ get_bytes_written,(void))
   return stats_n_bytes_written;
 }
 
+uint64_t
+get_msm_bytes_read(void) {
+  return stats_n_msm_bytes_read;
+}
+
+uint64_t
+get_msm_bytes_written(void) {
+  return stats_n_msm_bytes_written;
+}
+
 /**
  * Increment the amount of network traffic read and written, over the life of
  * this process.
  */
 void
-stats_increment_bytes_read_and_written(uint64_t r, uint64_t w)
+stats_increment_bytes_read_and_written(uint64_t r, uint64_t w, int is_msm)
 {
   stats_n_bytes_read += r;
   stats_n_bytes_written += w;
+  if (is_msm) {
+    stats_n_msm_bytes_read += r;
+    stats_n_msm_bytes_written += w;
+  }
 }
 
 /** Set the event mask on <b>conn</b> to <b>events</b>.  (The event

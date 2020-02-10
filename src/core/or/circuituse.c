@@ -1740,6 +1740,7 @@ circuit_has_opened(origin_circuit_t *circ)
   if (c->is_echo_circ) {
     //time_t now = time(NULL);
     c->n_chan->has_echo_circ = 1;
+    TO_CONN(BASE_CHAN_TO_TLS(c->n_chan)->conn)->has_echo_circ = 1;
     //log_notice(LD_CIRC, "Starting speedtest at %lu, run for %lu until %lu",
     //    now, c->echo_duration, c->echo_stop_time);
     //circuit_send_speedtest_cells(circ);
