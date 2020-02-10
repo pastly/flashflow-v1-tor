@@ -1669,7 +1669,7 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
   tor_assert(origin_circ);
   circuit_t *circ = TO_CIRCUIT(origin_circ);
   //log_info(LD_CONTROL, "Sending speedtest cells ...");
-  uint32_t after, before = circ->num_sent_echo_cells;
+  int count = 0;
   int res;
   while (!circ->streams_blocked_on_n_chan && time(NULL) < circ->echo_stop_time) {
     res = relay_send_command_from_edge(
@@ -1680,11 +1680,10 @@ circuit_send_speedtest_cells(origin_circuit_t *origin_circ)
           "Circuit is closed");
       break;
     } else {
-      circ->num_sent_echo_cells += 1;
+      ++count;
     }
   }
-  after = circ->num_sent_echo_cells;
-  log_info(LD_CONTROL, "Sent %u echo cells", after - before);
+  log_info(LD_CONTROL, "Sent %d echo cells", count);
   //control_speedtest_report_cell_counts();
   time_t now = time(NULL);
   if (now >= circ->echo_stop_time) {

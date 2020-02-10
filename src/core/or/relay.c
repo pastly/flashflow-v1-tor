@@ -255,24 +255,15 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
   if (circ->is_echo_circ_bg) {
     /* Echo circ on the client side */
     tor_assert(circ->is_echo_circ);
-    if (circ->num_recv_echo_cells || circ->num_sent_echo_cells) {
-      log_warn(
-          LD_OR, "About to overwrite existing num_recv=%u num_sent=%u "
-          "echo cells",
-          circ->num_recv_echo_cells,
-          circ->num_sent_echo_cells);
-    }
 #define RH_LEN 11
     uint32_t num_cells = tor_ntohl(get_uint32(cell->payload+RH_LEN));
 #undef RH_LEN
-    circ->num_recv_echo_cells = circ->num_sent_echo_cells = num_cells;
     control_speedtest_report_bg_traffic(num_cells * 514, num_cells * 514);
     //log_notice(LD_OR, "Got echo cell, we are bg (1/2)");
     return 0;
   } else if (circ->is_echo_circ && CIRCUIT_IS_ORIGIN(circ)) {
     /* Still echo circ on the client side */
     //log_notice(LD_OR, "Got echo cell (1/2)");
-    circ->num_recv_echo_cells++;
     return 0;
   }
 
@@ -309,8 +300,6 @@ circuit_receive_relay_cell(cell_t *cell, circuit_t *circ,
       connection_stop_reading(conn);
       log_notice(LD_OR, "Stopped reading on echo conn for a bit.");
     }
-    circ->num_recv_echo_cells += 1;
-    circ->num_sent_echo_cells += 1;
     return 0;
   }
 

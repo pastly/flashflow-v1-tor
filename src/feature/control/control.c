@@ -5893,8 +5893,6 @@ handle_control_testspeed_when_connected(
   {
     c->echo_duration = duration;
     c->echo_stop_time = now + (time_t)duration;
-    c->num_sent_echo_cells = 0;
-    c->num_recv_echo_cells = 0;
     c->echo_duration = duration;
     origin_circuit_t *oc = TO_ORIGIN_CIRCUIT(c);
     if (oc->has_opened) {
