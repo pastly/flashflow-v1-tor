@@ -5619,7 +5619,8 @@ control_speedtest_report_bg_traffic(uint64_t bg_read, uint64_t bg_written)
     return;
   if (speedtest_control_connection->speedtest_state != CTRL_SPEEDTEST_STATE_TESTING)
     return;
-  tor_assert(!speedtest_bg_reporter);
+  if (!speedtest_bg_reporter)
+    return;
   time_t now = time(NULL);
   log_notice(
       LD_CONTROL, "Reporting %" PRIu64 "/%" PRIu64 " recv/sent background bytes",
