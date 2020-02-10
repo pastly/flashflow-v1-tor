@@ -136,7 +136,6 @@ get_speedtest_control_connection(void)
   return speedtest_control_connection;
 }
 static smartlist_t *speedtest_circuits = NULL;
-static time_t speedtest_last_report_time = 0;
 static int speedtest_num_connected = 0;
 static int speedtest_bg_reporter = 0;
 #define SPEEDTEST_FAILSAFE_CIRC_BUILD_DURATION 5
@@ -5890,7 +5889,6 @@ handle_control_testspeed_when_connected(
   uint64_t r, w;
   control_get_msm_bytes_rw_last_sec(&r, &w);
   time_t now = time(NULL);
-  speedtest_last_report_time = now;
   SMARTLIST_FOREACH_BEGIN(speedtest_circuits, circuit_t *, c)
   {
     c->echo_duration = duration;
