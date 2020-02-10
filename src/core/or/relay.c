@@ -1575,8 +1575,21 @@ close_echo_channels(void) {
   log_notice(LD_EDGE, "Marked %d echo chans for close", num_chans_closed);
 }
 
+static uint64_t prev_all_bytes_read = 0;
+static uint64_t prev_all_bytes_written = 0;
 static uint64_t prev_msm_bytes_read = 0;
 static uint64_t prev_msm_bytes_written = 0;
+
+static void
+relay_get_all_bytes_rw_last_sec(uint64_t *n_read, uint64_t *n_written)
+{
+  const uint64_t read = get_bytes_read();
+  const uint64_t written = get_bytes_written();
+  *n_read = read - prev_all_bytes_read;
+  *n_written = written - prev_all_bytes_written;
+  prev_all_bytes_read = read;
+  prev_all_bytes_written = written;
+}
 
 static void
 relay_get_msm_bytes_rw_last_sec(uint64_t *n_read, uint64_t *n_written)
@@ -1614,6 +1627,7 @@ handle_relay_speedtest_startstop_cell(
     scheduler_notify_msm_starting();
     saved_coord_circ = circ;
     uint64_t r, w;
+    relay_get_all_bytes_rw_last_sec(&r, &w);
     relay_get_msm_bytes_rw_last_sec(&r, &w);
   } else {
     scheduler_notify_msm_stopping();
@@ -1627,11 +1641,12 @@ handle_relay_speedtest_startstop_cell(
 void
 relay_per_second_events(void) {
   if (saved_coord_circ && saved_coord_circ->state == CIRCUIT_STATE_OPEN) {
+    uint64_t all_read, all_written;
     uint64_t msm_read, msm_written;
+    relay_get_all_bytes_rw_last_sec(&all_read, &all_written);
     relay_get_msm_bytes_rw_last_sec(&msm_read, &msm_written);
-    uint64_t all_bytes_written = get_bytes_written();
-    uint64_t bg_bytes_written = all_bytes_written - msm_written;
-    uint32_t approx_bg_cells_written = (uint32_t)bg_bytes_written / 514;
+    uint64_t bg_written = all_written - msm_written;
+    uint32_t approx_bg_cells_written = (uint32_t)bg_written / 514;
     report_cell_count(approx_bg_cells_written);
   }
   time_t now = time(NULL);
