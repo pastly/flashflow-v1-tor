@@ -181,7 +181,7 @@ static int have_logged_kist_suddenly_disabled = 0;
 
 static int32_t scheduler_cell_write_limit = 0;
 static double scheduler_cell_write_limit_factor = 0.50;
-
+#define SCHED_MIN_CELL_WRITE_LIMIT 100
 static int scheduler_currently_in_measurement = 0;
 static uint32_t scheduler_echo_cell_must_accumulate = 0;
 
@@ -258,6 +258,20 @@ scheduler_evt_callback(mainloop_event_t *event, void *arg)
     cell_limit_this_time = (int32_t)(
       scheduler_cell_write_limit_factor * (double)scheduler_cell_write_limit /
       (1.0 - scheduler_cell_write_limit_factor));
+    // Oh but also as a hack, always allow at least a tiny bit of traffic. This
+    // is instead of fixing a race condition at the beginning of measurements:
+    // the target relay can find out that a measurement is about to start
+    // before it has opened any actual measurement circuits. If this happens,
+    // then this limit ends up always being zero as there is no measurement
+    // traffic. And because of that, KIST is never allowed to send those
+    // "background" traffic CREATED cells back to the measurer. Thus the
+    // circuits are never built as far as the measurer is concerned and the
+    // measurement fails.
+    if (cell_limit_this_time < SCHED_MIN_CELL_WRITE_LIMIT) {
+      log_notice(LD_SCHED, "Would set cell limit to %" PRIi32 ", but raising "
+          "to %" PRIi32, cell_limit_this_time, SCHED_MIN_CELL_WRITE_LIMIT);
+      cell_limit_this_time = SCHED_MIN_CELL_WRITE_LIMIT;
+    }
   }
 
 #ifdef HAVE_KIST_SUPPORT
